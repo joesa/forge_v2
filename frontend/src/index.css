@@ -1,0 +1,235 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&family=Instrument+Serif:ital@0;1&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ─────────────────────────────────────────────── */
+:root {
+  --void: #04040a;
+  --surface: #080812;
+  --panel: #0d0d1f;
+  --card: #111125;
+
+  --border: rgba(255, 255, 255, 0.06);
+  --border-bright: rgba(99, 217, 255, 0.22);
+
+  --forge: #63d9ff;
+  --forge-dim: rgba(99, 217, 255, 0.10);
+  --ember: #ff6b35;
+  --ember-dim: rgba(255, 107, 53, 0.10);
+  --gold: #f5c842;
+  --gold-dim: rgba(245, 200, 66, 0.08);
+  --jade: #3dffa0;
+  --jade-dim: rgba(61, 255, 160, 0.08);
+  --violet: #b06bff;
+  --violet-dim: rgba(176, 107, 255, 0.10);
+
+  --text: #e8e8f0;
+  --muted: rgba(232, 232, 240, 0.42);
+  --faint: rgba(232, 232, 240, 0.15);
+}
+
+/* ── Global reset ──────────────────────────────────────────────── */
+html,
+body,
+#root {
+  background: #04040a;
+  color: #e8e8f0;
+  font-family: 'Syne', sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Grid background utility ───────────────────────────────────── */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(99, 217, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 217, 255, 0.022) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* ── Keyframes ─────────────────────────────────────────────────── */
+@keyframes pulse-f {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes jade-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(61, 255, 160, 0.4); }
+  50% { box-shadow: 0 0 0 5px rgba(61, 255, 160, 0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Card component ────────────────────────────────────────────── */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px;
+  transition: border-color 200ms, transform 200ms;
+}
+
+.card:hover {
+  border-color: var(--border-bright);
+  transform: translateY(-2px);
+}
+
+/* Accent variants */
+.card.fa {
+  background: linear-gradient(135deg, rgba(99, 217, 255, 0.04), var(--panel));
+  border-color: rgba(99, 217, 255, 0.16);
+}
+
+.card.ea {
+  background: linear-gradient(135deg, rgba(255, 107, 53, 0.04), var(--panel));
+  border-color: rgba(255, 107, 53, 0.16);
+}
+
+.card.ja {
+  background: linear-gradient(135deg, rgba(61, 255, 160, 0.04), var(--panel));
+  border-color: rgba(61, 255, 160, 0.16);
+}
+
+.card.va {
+  background: linear-gradient(135deg, rgba(176, 107, 255, 0.04), var(--panel));
+  border-color: rgba(176, 107, 255, 0.16);
+}
+
+/* ── Button variants ───────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 8px;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  transition: opacity 200ms, transform 200ms, background 200ms, color 200ms;
+}
+
+.btn-lg { height: 48px; padding: 0 28px; font-size: 14px; }
+.btn-sm { height: 32px; padding: 0 14px; font-size: 12px; }
+
+.btn-primary {
+  background: var(--forge);
+  color: var(--void);
+}
+.btn-primary:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  color: var(--forge);
+}
+.btn-secondary:hover {
+  background: rgba(99, 217, 255, 0.08);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(232, 232, 240, 0.5);
+}
+.btn-ghost:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.btn-danger {
+  background: var(--ember-dim);
+  border: 1px solid rgba(255, 107, 53, 0.22);
+  color: var(--ember);
+}
+.btn-danger:hover {
+  background: rgba(255, 107, 53, 0.16);
+}
+
+/* ── Input ─────────────────────────────────────────────────────── */
+.input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  height: 44px;
+  padding: 0 14px;
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 200ms;
+}
+
+.input::placeholder {
+  color: rgba(232, 232, 240, 0.30);
+}
+
+.input:focus {
+  border-color: rgba(99, 217, 255, 0.30);
+}
+
+/* ── Tag / badge variants ──────────────────────────────────────── */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.tag-forge {
+  background: rgba(99, 217, 255, 0.10);
+  color: var(--forge);
+  border-color: rgba(99, 217, 255, 0.18);
+}
+
+.tag-ember {
+  background: rgba(255, 107, 53, 0.10);
+  color: var(--ember);
+  border-color: rgba(255, 107, 53, 0.18);
+}
+
+.tag-jade {
+  background: rgba(61, 255, 160, 0.08);
+  color: var(--jade);
+  border-color: rgba(61, 255, 160, 0.18);
+}
+
+.tag-violet {
+  background: rgba(176, 107, 255, 0.10);
+  color: var(--violet);
+  border-color: rgba(176, 107, 255, 0.18);
+}
+
+.tag-gold {
+  background: rgba(245, 200, 66, 0.08);
+  color: var(--gold);
+  border-color: rgba(245, 200, 66, 0.18);
+}
+
+.tag-muted {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(232, 232, 240, 0.5);
+  border-color: rgba(255, 255, 255, 0.08);
+}
