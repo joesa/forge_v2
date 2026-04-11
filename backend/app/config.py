@@ -1,8 +1,17 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
+
+_THIS_DIR = Path(__file__).resolve().parent  # backend/app/
+_BACKEND_DIR = _THIS_DIR.parent  # backend/
+_ROOT_DIR = _BACKEND_DIR.parent  # repo root
 
 
 class Settings(BaseSettings):
-    model_config = {"env_file": ["../.env.local", ".env"], "extra": "ignore"}
+    model_config = {
+        "env_file": [str(_ROOT_DIR / ".env.local"), str(_BACKEND_DIR / ".env")],
+        "extra": "ignore",
+    }
 
     # ── App ──────────────────────────────────────────────────────
     FORGE_ENV: str = "development"

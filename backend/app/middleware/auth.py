@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from fastapi import Request, HTTPException
+from fastapi import Request
 from jose import jwt, JWTError
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from app.config import settings
 
@@ -25,7 +25,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         auth_header = request.headers.get("authorization", "")
         if not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Missing bearer token")
+            return JSONResponse(status_code=401, content={"detail": "Missing bearer token"})
 
         token = auth_header[7:]
         try:
@@ -36,7 +36,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 audience="authenticated",
             )
             request.state.user_id = UUID(payload["sub"])
-        except (JWTError, KeyError, ValueError) as exc:
-            raise HTTPException(status_code=401, detail="Invalid token") from exc
+        except (JWTError, KeyError, ValueError):
+            return JSONResponse(status_code=401, content={"detail": "Invalid token"})
 
         return await call_next(request)

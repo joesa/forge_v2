@@ -35,6 +35,12 @@ async def health() -> dict:
     return {"status": "ok", "env": settings.FORGE_ENV}
 
 
+# ── API routers ──────────────────────────────────────────────────
+from app.api.v1.auth import router as auth_router
+
+app.include_router(auth_router)
+
+
 # ── Inngest endpoint ─────────────────────────────────────────────
 # inngest.fast_api.serve() mounts POST /api/inngest directly on the app
 from inngest.fast_api import serve as inngest_serve
