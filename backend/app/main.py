@@ -51,5 +51,25 @@ app.include_router(sandbox_router)
 # inngest.fast_api.serve() mounts POST /api/inngest directly on the app
 from inngest.fast_api import serve as inngest_serve
 from app.inngest_client import forge_inngest
+from app.functions.inngest_functions import (
+    pipeline_run_fn,
+    pipeline_failure_handler_fn,
+    build_run_fn,
+    idea_generation_fn,
+    sandbox_lifecycle_fn,
+    pool_replenish_fn,
+)
 
-inngest_serve(app, forge_inngest, functions=[], serve_path="/api/inngest")
+inngest_serve(
+    app,
+    forge_inngest,
+    functions=[
+        pipeline_run_fn,
+        pipeline_failure_handler_fn,
+        build_run_fn,
+        idea_generation_fn,
+        sandbox_lifecycle_fn,
+        pool_replenish_fn,
+    ],
+    serve_path="/api/inngest",
+)

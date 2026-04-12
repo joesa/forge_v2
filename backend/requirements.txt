@@ -20,6 +20,7 @@ passlib[bcrypt]==1.7.4
 
 # ── HTTP client ────────────────────────────────────────────────
 httpx==0.28.1
+aiohttp==3.13.5
 
 # ── Logging / monitoring ──────────────────────────────────────
 structlog==25.1.0
