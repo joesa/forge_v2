@@ -37,7 +37,8 @@ async def register_user(email: str, password: str, display_name: str) -> dict:
             json={"email": email, "password": password, "data": {"display_name": display_name}},
         )
     if resp.status_code >= 400:
-        detail = resp.json().get("msg", resp.json().get("error_description", resp.text))
+        body = resp.json()
+        detail = body.get("msg") or body.get("error_description") or resp.text
         raise SupabaseAuthError(resp.status_code, detail)
 
     data = resp.json()
@@ -84,7 +85,8 @@ async def login_user(email: str, password: str) -> dict:
             json={"email": email, "password": password},
         )
     if resp.status_code >= 400:
-        detail = resp.json().get("error_description", resp.text)
+        body = resp.json()
+        detail = body.get("msg") or body.get("error_description") or resp.text
         raise SupabaseAuthError(resp.status_code, detail)
 
     data = resp.json()
@@ -106,7 +108,8 @@ async def refresh_tokens(refresh_token: str) -> dict:
             json={"refresh_token": refresh_token},
         )
     if resp.status_code >= 400:
-        detail = resp.json().get("error_description", resp.text)
+        body = resp.json()
+        detail = body.get("msg") or body.get("error_description") or resp.text
         raise SupabaseAuthError(resp.status_code, detail)
     return resp.json()
 
@@ -127,7 +130,8 @@ async def logout_user(access_token: str) -> None:
         )
     # Ignore 401 — user may already be logged out
     if resp.status_code >= 400 and resp.status_code != 401:
-        detail = resp.json().get("msg", resp.text)
+        body = resp.json()
+        detail = body.get("msg") or resp.text
         raise SupabaseAuthError(resp.status_code, detail)
 
 
@@ -154,5 +158,6 @@ async def reset_password(token: str, new_password: str) -> None:
             json={"password": new_password},
         )
     if resp.status_code >= 400:
-        detail = resp.json().get("msg", resp.json().get("error_description", resp.text))
+        body = resp.json()
+        detail = body.get("msg") or body.get("error_description") or resp.text
         raise SupabaseAuthError(resp.status_code, detail)

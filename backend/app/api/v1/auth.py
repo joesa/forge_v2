@@ -50,7 +50,11 @@ async def register_endpoint(body: RegisterRequest):
         data = await register_user(body.email, body.password, body.display_name)
     except SupabaseAuthError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail) from e
-    return data
+    return {
+        "user": data.get("user"),
+        "access_token": data.get("access_token"),
+        "refresh_token": data.get("refresh_token"),
+    }
 
 
 @router.post("/login")

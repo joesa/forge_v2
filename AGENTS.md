@@ -61,7 +61,42 @@ Guarantee: zero broken first builds through a 10-layer reliability system.
 12. Preview: file save → browser update < 700ms
 13. Northflank: compute only
 
+## Operations
+
+### Migrations (Alembic)
+- Config: backend/alembic.ini, env.py uses DATABASE_DIRECT_URL (never pooler)
+- After any model change:
+  1. cd backend && alembic revision --autogenerate -m "<description>"
+  2. Review generated migration — verify correctness
+  3. cd backend && alembic upgrade head
+  4. Run tests: cd backend && pytest tests/ -v
+- Existing migrations: backend/alembic/versions/
+
+### Deployment
+| Service          | Platform          | Trigger                                      |
+|------------------|-------------------|----------------------------------------------|
+| Backend API      | Northflank        | Push to deploy branch → container auto-build |
+| Frontend         | Cloudflare Pages  | Push to deploy branch → auto-build           |
+| Preview Proxy    | Cloudflare Workers| cd workers/preview-proxy && npx wrangler deploy |
+| Inngest functions| Auto-sync         | Discovered at /api/inngest on backend deploy  |
+| Database         | Supabase (managed)| Alembic migrations only                      |
+| Auth / Storage   | Supabase (managed)| Dashboard or supabase-py SDK                 |
+| Edge Functions   | Supabase          | cd supabase && supabase functions deploy <name> |
+
+### Pre-deploy checklist
+1. Backend: cd backend && pytest tests/ -v (all pass)
+2. Frontend: cd frontend && npm run typecheck && npm run build (zero errors)
+3. Migrations: cd backend && alembic upgrade head (BEFORE deploying new backend code)
+4. Workers: deploy only if changed — cd workers/preview-proxy && npx wrangler deploy
+
+### Inngest
+- Client: backend/app/inngest_client.py (forge_inngest)
+- Serve: backend/app/main.py → inngest_serve(app, forge_inngest, functions=[...])
+- Register new function: add to functions=[] array in main.py
+- Events: prefix forge/ (e.g. forge/pipeline.run)
+- Local dev: run inngest dev server alongside backend
+
 ## Build Status
 Phase: 1 — Foundation
-Completed: none
-Next: Session 1.1 — Backend core
+Completed: Sessions 1.1–1.7 (backend core, models, auth, projects, storage, frontend scaffold, all 22 pages)
+Next: Session 1.8

@@ -31,8 +31,9 @@ const APIKeysPage = lazy(() => import('@/pages/settings/APIKeysPage'))
 const SecurityPage = lazy(() => import('@/pages/settings/SecurityPage'))
 const BillingPage = lazy(() => import('@/pages/settings/BillingPage'))
 
-// ── Auth guard ──────────────────────────────────────────────────
+// ── Layouts + guards ────────────────────────────────────────────
 const ProtectedRoute = lazy(() => import('@/components/auth/ProtectedRoute'))
+const SettingsLayout = lazy(() => import('@/components/layout/SettingsLayout'))
 
 function PageSpinner() {
   return (
@@ -56,14 +57,16 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-        {/* Protected — Editor (NO AppShell, full viewport) */}
+        {/* Protected — no AppShell (custom nav) */}
         <Route element={<ProtectedRoute noShell />}>
           <Route path="/projects/:id/editor" element={<EditorPage />} />
+          <Route path="/onboarding" element={<OnboardingPage />} />
+          <Route path="/ideate" element={<IdeatePage />} />
+          <Route path="/ideate/questionnaire/:id" element={<QuestionnairePage />} />
         </Route>
 
         {/* Protected — with AppShell */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/projects" element={<ProjectsListPage />} />
           <Route path="/projects/new" element={<NewProjectPage />} />
@@ -71,17 +74,17 @@ export default function App() {
           <Route path="/projects/:id/builds" element={<BuildsPage />} />
           <Route path="/projects/:id/deployments" element={<DeploymentsPage />} />
           <Route path="/projects/:id/settings" element={<ProjectSettingsPage />} />
-          <Route path="/ideate" element={<IdeatePage />} />
-          <Route path="/ideate/questionnaire/:id" element={<QuestionnairePage />} />
           <Route path="/ideate/ideas/:id" element={<IdeaDetailPage />} />
           <Route path="/pipeline/:id" element={<PipelinePage />} />
-          <Route path="/settings/profile" element={<ProfilePage />} />
-          <Route path="/settings/ai-providers" element={<AIProvidersPage />} />
-          <Route path="/settings/model-routing" element={<ModelRoutingPage />} />
-          <Route path="/settings/integrations" element={<IntegrationsPage />} />
-          <Route path="/settings/api-keys" element={<APIKeysPage />} />
-          <Route path="/settings/security" element={<SecurityPage />} />
-          <Route path="/settings/billing" element={<BillingPage />} />
+          <Route path="/settings" element={<SettingsLayout />}>
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="ai-providers" element={<AIProvidersPage />} />
+            <Route path="model-routing" element={<ModelRoutingPage />} />
+            <Route path="integrations" element={<IntegrationsPage />} />
+            <Route path="api-keys" element={<APIKeysPage />} />
+            <Route path="security" element={<SecurityPage />} />
+            <Route path="billing" element={<BillingPage />} />
+          </Route>
         </Route>
       </Routes>
     </Suspense>
