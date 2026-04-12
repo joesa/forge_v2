@@ -40,6 +40,10 @@ from app.reliability.layer2_schema_driven.db_type_injector import generate_ts_in
 from app.reliability.layer4_coherence.file_coherence_engine import run_coherence_check
 from app.reliability.layer4_coherence.barrel_validator import validate_barrels
 from app.reliability.layer4_coherence.seam_checker import check_seams
+from app.reliability.layer7_simulation.wiremock_manager import (
+    WireMockManager,
+    detect_required_services,
+)
 from app.agents.build import BUILD_AGENTS, REVIEW_AGENT
 from app.agents.build.hotfix_agent import apply_hotfix
 from app.services.snapshot_service import capture_snapshot
@@ -227,50 +231,72 @@ async def build(state: PipelineState) -> PipelineState:
     build_uuid = uuid.UUID(pipeline_id) if pipeline_id else uuid.uuid4()
     project_uuid = uuid.UUID(project_id) if project_id else uuid.uuid4()
 
-    # ── Agents 1-9: sequential build ─────────────────────────────
-    for agent in BUILD_AGENTS:
-        await _publish(state, 6, "running", f"Agent {agent.agent_number}: {agent.name}")
+    # ── Layer 7: WireMock external service simulation ────────────
+    wiremock = WireMockManager()
+    import os
+    _original_base_url = os.environ.get("EXTERNAL_API_BASE_URL")
+    try:
+        await wiremock.start()
+        required_services = detect_required_services(state)
+        await wiremock.configure_stubs(required_services)
+        os.environ["EXTERNAL_API_BASE_URL"] = wiremock.base_url
 
-        new_files = await agent.execute(state)
-        state["generated_files"].update(new_files)
+        # ── Agents 1-9: sequential build ─────────────────────────
+        for agent in BUILD_AGENTS:
+            await _publish(state, 6, "running", f"Agent {agent.agent_number}: {agent.name}")
 
-        # Snapshot after every agent
+            new_files = await agent.execute(state)
+            state["generated_files"].update(new_files)
+
+            # Snapshot after every agent
+            await capture_snapshot(
+                build_id=build_uuid,
+                project_id=project_uuid,
+                agent_number=agent.agent_number,
+                agent_type=agent.name,
+                generated_files=state["generated_files"],
+            )
+
+            # G7 gate after every agent
+            g7 = validate_g7(state)
+            state.setdefault("gate_results", {})[f"g7_agent_{agent.agent_number}"] = g7
+
+            if not g7["passed"]:
+                await _publish(state, 6, "running", f"G7 failed for agent {agent.agent_number}, attempting hotfix")
+                hotfix_result = await apply_hotfix(state, agent.agent_number, g7)
+                if not hotfix_result.applied:
+                    state.setdefault("errors", []).append(
+                        f"Agent {agent.agent_number} ({agent.name}) G7 failed: {g7['reason']}"
+                    )
+                    await _publish(state, 6, "failed", f"Agent {agent.agent_number} build failed")
+                    return state
+
+        # ── Agent 10: ReviewAgent — validates only ───────────────
+        await _publish(state, 6, "running", "Agent 10: review (validation only)")
+
+        review_report = await REVIEW_AGENT.review(state)
+        state.setdefault("gate_results", {})["review"] = review_report
+
+        # Snapshot after review
         await capture_snapshot(
             build_id=build_uuid,
             project_id=project_uuid,
-            agent_number=agent.agent_number,
-            agent_type=agent.name,
+            agent_number=10,
+            agent_type="review",
             generated_files=state["generated_files"],
         )
 
-        # G7 gate after every agent
-        g7 = validate_g7(state)
-        state.setdefault("gate_results", {})[f"g7_agent_{agent.agent_number}"] = g7
+        # Verify all external calls were stubbed
+        wiremock_report = await wiremock.verify_all_calls()
+        state.setdefault("gate_results", {})["wiremock"] = wiremock_report
 
-        if not g7["passed"]:
-            await _publish(state, 6, "running", f"G7 failed for agent {agent.agent_number}, attempting hotfix")
-            hotfix_result = await apply_hotfix(state, agent.agent_number, g7)
-            if not hotfix_result.applied:
-                state.setdefault("errors", []).append(
-                    f"Agent {agent.agent_number} ({agent.name}) G7 failed: {g7['reason']}"
-                )
-                await _publish(state, 6, "failed", f"Agent {agent.agent_number} build failed")
-                return state
-
-    # ── Agent 10: ReviewAgent — validates only ───────────────────
-    await _publish(state, 6, "running", "Agent 10: review (validation only)")
-
-    review_report = await REVIEW_AGENT.review(state)
-    state.setdefault("gate_results", {})["review"] = review_report
-
-    # Snapshot after review
-    await capture_snapshot(
-        build_id=build_uuid,
-        project_id=project_uuid,
-        agent_number=10,
-        agent_type="review",
-        generated_files=state["generated_files"],
-    )
+    finally:
+        # MUST always stop — even on pipeline failure
+        await wiremock.stop()
+        if _original_base_url is not None:
+            os.environ["EXTERNAL_API_BASE_URL"] = _original_base_url
+        else:
+            os.environ.pop("EXTERNAL_API_BASE_URL", None)
 
     # ── Store generated files to Supabase Storage ────────────────
     storage_key = f"{project_id}/{build_uuid}/build.json"
