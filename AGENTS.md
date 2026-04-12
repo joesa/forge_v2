@@ -97,6 +97,6 @@ Guarantee: zero broken first builds through a 10-layer reliability system.
 - Local dev: run inngest dev server alongside backend
 
 ## Build Status
-Phase: 1 — Foundation
-Completed: Sessions 1.1–1.7 (backend core, models, auth, projects, storage, frontend scaffold, all 22 pages)
-Next: Session 1.8
+Phase: 3 — Preview System
+Completed: Sessions 1.1–1.7 (backend core, models, auth, projects, storage, frontend scaffold, all 22 pages), 1.8 (editor infrastructure), 2.1–2.8 (pipeline, C-Suite agents, build agents 1-10, reliability layers 1-10)
+Next: Session 3.1

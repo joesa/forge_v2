@@ -444,13 +444,13 @@ class TestReviewAgent:
 
 class TestHotfixAgent:
     @pytest.mark.asyncio
-    async def test_hotfix_returns_not_implemented(self):
+    async def test_hotfix_returns_not_applied_when_no_file(self):
         result = await apply_hotfix(
             _base_state(), agent_number=1, gate_result={"passed": False, "reason": "test"}
         )
         assert isinstance(result, HotfixResult)
         assert result.applied is False
-        assert result.description == "not_yet_implemented"
+        assert result.description == "could_not_identify_failing_file"
 
     @pytest.mark.asyncio
     async def test_hotfix_agent_class(self):
