@@ -3,6 +3,7 @@ import { useEditorStore } from '@/stores/editorStore'
 import { usePreview } from '@/hooks/usePreview'
 import PreviewToolbar from './PreviewToolbar'
 import AnnotationLayer from './AnnotationLayer'
+import SnapshotTimeline from './SnapshotTimeline'
 
 const MONO = "'JetBrains Mono', monospace"
 const PREVIEW_DOMAIN = '.preview.forge.dev'
@@ -181,30 +182,8 @@ export default function PreviewPane() {
         }}
       />
 
-      {/* SnapshotTimeline placeholder — 38px */}
-      <div
-        style={{
-          height: 38,
-          flexShrink: 0,
-          background: 'rgba(4,4,10,0.95)',
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 10px',
-        }}
-      >
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 9,
-            color: 'rgba(232,232,240,0.20)',
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-          }}
-        >
-          Snapshots
-        </span>
-      </div>
+      {/* Snapshot Timeline — 38px */}
+      <SnapshotTimeline />
     </div>
   )
 }
