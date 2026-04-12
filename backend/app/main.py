@@ -38,9 +38,11 @@ async def health() -> dict:
 # ── API routers ──────────────────────────────────────────────────
 from app.api.v1.auth import router as auth_router
 from app.api.v1.projects import router as projects_router
+from app.api.v1.pipeline import router as pipeline_router
 
 app.include_router(auth_router)
 app.include_router(projects_router)
+app.include_router(pipeline_router)
 
 
 # ── Inngest endpoint ─────────────────────────────────────────────
