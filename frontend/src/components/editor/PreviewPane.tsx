@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react'
 import { useEditorStore } from '@/stores/editorStore'
 import { usePreview } from '@/hooks/usePreview'
 import PreviewToolbar from './PreviewToolbar'
+import AnnotationLayer from './AnnotationLayer'
 
 const MONO = "'JetBrains Mono', monospace"
 const PREVIEW_DOMAIN = '.preview.forge.dev'
@@ -166,6 +167,9 @@ export default function PreviewPane() {
             title={healthy ? 'Sandbox healthy' : 'Sandbox unreachable'}
           />
         )}
+
+        {/* Annotation overlay */}
+        <AnnotationLayer sandboxId={sandboxId} iframeRef={iframeRef} />
       </div>
 
       {/* DevConsole placeholder */}
