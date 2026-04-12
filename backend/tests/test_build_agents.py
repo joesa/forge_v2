@@ -466,11 +466,24 @@ class TestHotfixAgent:
 
 class TestSnapshotService:
     @pytest.mark.asyncio
+    @patch("app.services.snapshot_service.redis_client", None)
+    @patch("app.services.snapshot_service.get_write_session")
     @patch("app.services.snapshot_service.upload_file", new_callable=AsyncMock)
-    async def test_capture_snapshot(self, mock_upload):
+    async def test_capture_snapshot(self, mock_upload, mock_write_session):
         from app.services.snapshot_service import capture_snapshot
 
-        mock_upload.return_value = "https://example.com/snapshot.json"
+        mock_upload.return_value = "https://example.com/snapshot.webp"
+
+        # Mock write session context manager
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+        # flush sets the id on the model
+        async def _flush():
+            pass
+        mock_session.flush = _flush
+        mock_session.add = lambda x: setattr(x, 'id', uuid.uuid4())
+        mock_write_session.return_value = mock_session
 
         build_id = uuid.uuid4()
         project_id = uuid.uuid4()
@@ -484,8 +497,9 @@ class TestSnapshotService:
             generated_files=files,
         )
 
-        assert result["url"] == "https://example.com/snapshot.json"
+        assert result["screenshot_url"] == "https://example.com/snapshot.webp"
         assert "storage_key" in result
+        assert "snapshot_id" in result
         mock_upload.assert_called_once()
 
         # Verify the payload is valid JSON
