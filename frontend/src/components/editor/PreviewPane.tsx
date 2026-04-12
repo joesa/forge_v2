@@ -4,6 +4,7 @@ import { usePreview } from '@/hooks/usePreview'
 import PreviewToolbar from './PreviewToolbar'
 import AnnotationLayer from './AnnotationLayer'
 import SnapshotTimeline from './SnapshotTimeline'
+import PreviewDevConsole from './PreviewDevConsole'
 
 const MONO = "'JetBrains Mono', monospace"
 const PREVIEW_DOMAIN = '.preview.forge.dev'
@@ -173,14 +174,8 @@ export default function PreviewPane() {
         <AnnotationLayer sandboxId={sandboxId} iframeRef={iframeRef} />
       </div>
 
-      {/* DevConsole placeholder */}
-      <div
-        style={{
-          height: 0,
-          flexShrink: 0,
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-        }}
-      />
+      {/* Dev Console */}
+      <PreviewDevConsole sandboxId={sandboxId} />
 
       {/* Snapshot Timeline — 38px */}
       <SnapshotTimeline />
