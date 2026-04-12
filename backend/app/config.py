@@ -53,6 +53,7 @@ class Settings(BaseSettings):
 
     # ── Pinecone ─────────────────────────────────────────────────
     PINECONE_API_KEY: str = ""
+    PINECONE_INDEX: str = "forge-build-cache"
 
     # ── AI Providers ─────────────────────────────────────────────
     ANTHROPIC_API_KEY: str = ""
