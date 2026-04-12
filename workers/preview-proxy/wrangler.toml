@@ -1,0 +1,27 @@
+name = "preview-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+# Routes: *.preview.forge.dev/*
+routes = [
+  { pattern = "*.preview.forge.dev/*", zone_name = "forge.dev" }
+]
+
+# KV namespace for sandbox URL registry
+[[kv_namespaces]]
+binding = "SANDBOX_URLS"
+id = "PLACEHOLDER_KV_ID"
+
+# Durable Object for HMR WebSocket relay
+[durable_objects]
+bindings = [
+  { name = "PREVIEW_HMR", class_name = "PreviewHMR" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["PreviewHMR"]
+
+# Secrets (set via `wrangler secret put`):
+#   SUPABASE_JWT_SECRET
+#   FORGE_HMAC_SECRET
