@@ -1,91 +1,41 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import Editor from '@monaco-editor/react'
-
-const mockFiles = [
-  { name: 'src', type: 'dir' as const, depth: 0, children: [
-    { name: 'app', type: 'dir' as const, depth: 1, children: [
-      { name: 'dashboard', type: 'dir' as const, depth: 2, children: [
-        { name: 'page.tsx', type: 'file' as const, depth: 3, status: 'active' as const },
-        { name: 'layout.tsx', type: 'file' as const, depth: 3, status: 'modified' as const },
-      ]},
-      { name: 'layout.tsx', type: 'file' as const, depth: 2, status: 'default' as const },
-      { name: 'page.tsx', type: 'file' as const, depth: 2, status: 'default' as const },
-    ]},
-    { name: 'components', type: 'dir' as const, depth: 1, children: [
-      { name: 'Header.tsx', type: 'file' as const, depth: 2, status: 'new' as const },
-      { name: 'Sidebar.tsx', type: 'file' as const, depth: 2, status: 'default' as const },
-    ]},
-    { name: 'globals.css', type: 'file' as const, depth: 1, status: 'modified' as const },
-  ]},
-  { name: 'package.json', type: 'file' as const, depth: 0, status: 'default' as const },
-  { name: 'tsconfig.json', type: 'file' as const, depth: 0, status: 'default' as const },
-]
-
-const sampleCode = `import { Card } from '@/components/ui/card'
-import { BarChart, Users, Activity, DollarSign } from 'lucide-react'
-
-export default function DashboardPage() {
-  const stats = [
-    { title: 'Total Revenue', value: '$45,231', icon: DollarSign, change: '+20.1%' },
-    { title: 'Subscriptions', value: '+2350', icon: Users, change: '+180.1%' },
-    { title: 'Sales', value: '+12,234', icon: BarChart, change: '+19%' },
-    { title: 'Active Now', value: '+573', icon: Activity, change: '+201' },
-  ]
-
-  return (
-    <div className="flex flex-col gap-4 p-6">
-      <h1 className="text-3xl font-bold">Dashboard</h1>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.title} className="p-6">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted">{stat.title}</span>
-              <stat.icon className="h-4 w-4 text-muted" />
-            </div>
-            <div className="text-2xl font-bold mt-2">{stat.value}</div>
-            <p className="text-xs text-green-500 mt-1">{stat.change} from last month</p>
-          </Card>
-        ))}
-      </div>
-    </div>
-  )
-}`
+import { useEditorStore } from '@/stores/editorStore'
+import { useEditor } from '@/hooks/useEditor'
+import ForgeMonacoEditor, { langFromPath } from '@/components/editor/MonacoEditor'
+import FileTree from '@/components/editor/FileTree'
+import EditorTabs from '@/components/editor/EditorTabs'
 
 const activityIcons = ['📁', '🔍', '⚡', '🔀', '🐛', '🧪']
-
-const statusDotColor: Record<string, string> = {
-  active: '#63d9ff',
-  modified: '#ff6b35',
-  new: '#3dffa0',
-  default: 'transparent',
-}
-
-interface FileItem {
-  name: string
-  type: 'file' | 'dir'
-  depth: number
-  status?: string
-  children?: FileItem[]
-}
-
-function flattenFiles(items: FileItem[]): FileItem[] {
-  const result: FileItem[] = []
-  for (const item of items) {
-    result.push(item)
-    if (item.type === 'dir' && item.children) {
-      result.push(...flattenFiles(item.children))
-    }
-  }
-  return result
-}
 
 export default function EditorPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [showPreview, setShowPreview] = useState(false)
+  const projectId = id ?? ''
+  const { saveNow, handleContentChange, handleFileOpen } = useEditor(projectId)
+  const {
+    activeFile,
+    fileContents,
+    previewVisible,
+    devConsoleErrors,
+    togglePreview,
+  } = useEditorStore()
   const [activeActivity, setActiveActivity] = useState(0)
-  const flat = flattenFiles(mockFiles)
+
+  const currentContent = activeFile ? (fileContents[activeFile] ?? '') : ''
+  const currentLang = activeFile ? langFromPath(activeFile) : 'typescript'
+  const breadcrumb = activeFile ? activeFile.split('/') : []
+
+  const handleEditorChange = useCallback(
+    (value: string) => {
+      if (activeFile) handleContentChange(activeFile, value)
+    },
+    [activeFile, handleContentChange],
+  )
+
+  const handleSave = useCallback(() => {
+    void saveNow()
+  }, [saveNow])
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#04040a' }}>
@@ -100,9 +50,9 @@ export default function EditorPage() {
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: 'var(--ember)' }}>● 2 errors</span>
-          <button className="btn btn-ghost btn-sm" style={{ height: 28, fontSize: 11 }} onClick={() => setShowPreview(!showPreview)}>
-            {showPreview ? '⊟' : '⊞'} Preview
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: 'var(--ember)' }}>● {devConsoleErrors} error{devConsoleErrors !== 1 ? 's' : ''}</span>
+          <button className="btn btn-ghost btn-sm" style={{ height: 28, fontSize: 11 }} onClick={togglePreview}>
+            {previewVisible ? '⊟' : '⊞'} Preview
           </button>
           <button className="btn btn-primary btn-sm" style={{ height: 28, fontSize: 11 }}>▲ Deploy</button>
           <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #63d9ff, #b06bff)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--void)' }}>JS</div>
@@ -110,7 +60,7 @@ export default function EditorPage() {
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: `46px 210px 1fr ${showPreview ? '310px' : ''} 295px`, overflow: 'hidden', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: `46px 210px 1fr ${previewVisible ? '310px' : ''} 295px`, overflow: 'hidden', minHeight: 0 }}>
         {/* Activity bar — 46px */}
         <div style={{ background: 'rgba(4,4,10,0.90)', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 0', gap: 5 }}>
           {activityIcons.map((icon, i) => (
@@ -133,106 +83,43 @@ export default function EditorPage() {
         </div>
 
         {/* File tree */}
-        <div style={{ borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: 'rgba(232,232,240,0.40)', padding: '9px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Explorer</span>
-            <span style={{ color: '#63d9ff', cursor: 'pointer' }}>+</span>
-          </div>
-          <div style={{ padding: '6px 0', overflowY: 'auto', flex: 1 }}>
-            {flat.map((f, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: `3px 8px`, paddingLeft: 8 + f.depth * 11,
-                fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
-                color: f.status === 'active' ? '#63d9ff' : f.type === 'dir' ? 'var(--text)' : 'rgba(232,232,240,0.42)',
-                background: f.status === 'active' ? 'rgba(99,217,255,0.08)' : 'transparent',
-                cursor: 'pointer',
-              }}>
-                {f.type === 'dir' ? (
-                  <span style={{ fontSize: 8, color: '#f5c842' }}>▶</span>
-                ) : (
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusDotColor[f.status ?? 'default'], flexShrink: 0 }} />
-                )}
-                {f.name}
-              </div>
-            ))}
-          </div>
-        </div>
+        <FileTree onFileOpen={handleFileOpen} />
 
         {/* Main editor area */}
         <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {/* Tab bar */}
-          <div style={{ height: 34, borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', overflowX: 'auto', flexShrink: 0 }}>
-            {[{ name: 'page.tsx', active: true, modified: false }, { name: 'layout.tsx', active: false, modified: true }].map((tab) => (
-              <div key={tab.name} style={{
-                minWidth: 90, display: 'flex', alignItems: 'center', gap: 7, padding: '0 13px',
-                fontFamily: "'JetBrains Mono', monospace", fontSize: 10,
-                color: tab.active ? 'var(--text)' : 'rgba(232,232,240,0.40)',
-                borderBottom: tab.active ? '2px solid #63d9ff' : '2px solid transparent',
-                background: tab.active ? 'rgba(255,255,255,0.02)' : 'transparent',
-                cursor: 'pointer',
-              }}>
-                {tab.modified && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ff6b35' }} />}
-                {tab.name}
-                <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(232,232,240,0.25)', cursor: 'pointer' }}>×</span>
-              </div>
-            ))}
-          </div>
+          <EditorTabs />
 
           {/* Breadcrumb */}
           <div style={{ padding: '5px 14px', background: 'rgba(255,255,255,0.015)', borderBottom: '1px solid rgba(255,255,255,0.06)', fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'rgba(232,232,240,0.30)' }}>
-            src › app › dashboard › <span style={{ color: '#63d9ff' }}>page.tsx</span>
+            {breadcrumb.map((seg, i) => (
+              <span key={i}>
+                {i > 0 && ' › '}
+                <span style={i === breadcrumb.length - 1 ? { color: '#63d9ff' } : undefined}>{seg}</span>
+              </span>
+            ))}
+            {breadcrumb.length === 0 && <span>No file open</span>}
           </div>
 
           {/* Monaco */}
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            <Editor
-              height="100%"
-              defaultLanguage="typescript"
-              defaultValue={sampleCode}
-              theme="vs-dark"
-              options={{
-                fontSize: 12,
-                lineHeight: 1.85,
-                minimap: { enabled: true, size: 'proportional' },
-                fontFamily: "'JetBrains Mono', monospace",
-                scrollBeyondLastLine: false,
-                padding: { top: 16 },
-                renderLineHighlight: 'all',
-              }}
-              beforeMount={(monaco) => {
-                monaco.editor.defineTheme('forge-dark', {
-                  base: 'vs-dark',
-                  inherit: true,
-                  rules: [
-                    { token: 'keyword', foreground: 'b06bff' },
-                    { token: 'identifier', foreground: '63d9ff' },
-                    { token: 'string', foreground: '3dffa0' },
-                    { token: 'type', foreground: 'f5c842' },
-                    { token: 'comment', foreground: '6b6b88', fontStyle: 'italic' },
-                    { token: 'delimiter', foreground: 'ff6b35' },
-                    { token: 'number', foreground: 'ff6b35' },
-                  ],
-                  colors: {
-                    'editor.background': '#04040a',
-                    'editor.foreground': '#e8e8f0',
-                    'editor.lineHighlightBackground': '#ffffff06',
-                    'editor.selectionBackground': '#63d9ff1f',
-                    'editorLineNumber.foreground': '#e8e8f026',
-                  },
-                })
-              }}
-              onMount={(editor, monaco) => {
-                monaco.editor.setTheme('forge-dark')
-                // Suppress unused warning
-                void editor
-              }}
-            />
+            {activeFile ? (
+              <ForgeMonacoEditor
+                value={currentContent}
+                language={currentLang}
+                onChange={handleEditorChange}
+                onSave={handleSave}
+              />
+            ) : (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#04040a' }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: 'rgba(232,232,240,0.20)' }}>Open a file to start editing</span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Preview pane (conditional) */}
-        {showPreview && (
+        {previewVisible && (
           <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {/* Preview toolbar */}
             <div style={{ height: 38, background: 'rgba(4,4,10,0.95)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 10px', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
