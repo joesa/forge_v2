@@ -3,6 +3,9 @@ from __future__ import annotations
 from app.agents.state import PipelineState
 
 
+from app.agents.csuite.schemas import CSUITE_SCHEMAS
+
+
 def validate_g1(state: PipelineState) -> dict:
     if not state.get("idea_spec"):
         return {"passed": False, "reason": "idea_spec is empty"}
@@ -10,9 +13,17 @@ def validate_g1(state: PipelineState) -> dict:
 
 
 def validate_g2(state: PipelineState) -> dict:
-    if not state.get("csuite_outputs"):
+    outputs = state.get("csuite_outputs") or {}
+    if not outputs:
         return {"passed": False, "reason": "csuite_outputs missing"}
-    return {"passed": True, "reason": "csuite_outputs present"}
+    for name, output in outputs.items():
+        schema = CSUITE_SCHEMAS.get(name)
+        if schema:
+            try:
+                schema.model_validate(output)
+            except Exception as e:
+                return {"passed": False, "reason": f"{name} failed validation: {e}"}
+    return {"passed": True, "reason": "all csuite outputs valid"}
 
 
 def validate_g3(state: PipelineState) -> dict:

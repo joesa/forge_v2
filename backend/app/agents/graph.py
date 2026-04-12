@@ -6,7 +6,19 @@ import time
 
 from langgraph.graph import END, StateGraph
 
+from app.agents.csuite.base import BaseCSuiteAgent
+from app.agents.csuite.ceo_agent import CEOAgent
+from app.agents.csuite.cto_agent import CTOAgent
+from app.agents.csuite.cdo_agent import CDOAgent
+from app.agents.csuite.cmo_agent import CMOAgent
+from app.agents.csuite.cpo_agent import CPOAgent
+from app.agents.csuite.cso_agent import CSOAgent
+from app.agents.csuite.cco_agent import CCOAgent
+from app.agents.csuite.cfo_agent import CFOAgent
+from app.agents.csuite.schemas import CSUITE_SCHEMAS
 from app.agents.state import PipelineState
+from app.agents.synthesis.g3_resolver import resolve_conflicts
+from app.agents.synthesis.synthesizer import synthesize
 from app.agents.validators import (
     validate_g1,
     validate_g2,
@@ -16,6 +28,11 @@ from app.agents.validators import (
     validate_g7,
 )
 from app.core.redis import redis_client
+
+_CSUITE_AGENTS: list[BaseCSuiteAgent] = [
+    CEOAgent(), CTOAgent(), CDOAgent(), CMOAgent(),
+    CPOAgent(), CSOAgent(), CCOAgent(), CFOAgent(),
+]
 
 
 async def _publish(state: PipelineState, stage: int, status: str, message: str) -> None:
@@ -54,19 +71,33 @@ async def csuite_analysis(state: PipelineState) -> PipelineState:
     await _publish(state, 2, "running", "Running C-suite agents")
     state["current_stage"] = 2
 
-    # 8 agents in parallel (placeholders)
-    async def _agent(name: str) -> tuple[str, dict]:
-        return name, {"status": "ok"}
+    idea_spec = state.get("idea_spec", {})
 
-    agents = ["ceo", "cto", "cpo", "cdo", "cso", "cmo", "cfo", "coo"]
-    results = await asyncio.gather(*[_agent(a) for a in agents])
-    state["csuite_outputs"] = dict(results)
+    # 8 agents in parallel
+    async def _run_agent(agent: BaseCSuiteAgent) -> tuple[str, dict]:
+        output = await agent.execute(idea_spec)
+        return agent.name, output
 
-    # G2 per agent
-    g2 = validate_g2(state)
+    results = await asyncio.gather(*[_run_agent(a) for a in _CSUITE_AGENTS])
+    csuite_outputs = dict(results)
+
+    # G2: validate each agent output against its Pydantic schema
+    g2_all_passed = True
+    for name, output in csuite_outputs.items():
+        schema = CSUITE_SCHEMAS.get(name)
+        if schema:
+            try:
+                schema.model_validate(output)
+            except Exception:
+                g2_all_passed = False
+
+    g2 = {"passed": g2_all_passed, "reason": "all outputs valid" if g2_all_passed else "schema validation failed"}
     state.setdefault("gate_results", {})["g2"] = g2
 
-    # G3 resolve
+    # G3: resolve conflicts (always passes)
+    resolved_outputs, resolutions = resolve_conflicts(csuite_outputs)
+    state["csuite_outputs"] = resolved_outputs
+
     g3 = validate_g3(state)
     state.setdefault("gate_results", {})["g3"] = g3
 
@@ -79,13 +110,18 @@ async def synthesis(state: PipelineState) -> PipelineState:
     await _publish(state, 3, "running", "Synthesizing plan")
     state["current_stage"] = 3
 
-    # Synthesizer (placeholder)
-    state["comprehensive_plan"] = {"coherence_score": 0.92}
+    csuite_outputs = state.get("csuite_outputs", {})
+    resolutions = state.get("gate_results", {}).get("g3", {}).get("resolutions", [])
+
+    # Synthesize into ComprehensivePlan
+    plan = await synthesize(csuite_outputs, resolutions)
+    state["comprehensive_plan"] = plan
 
     # G4 — retry once on fail
     g4 = validate_g4(state)
     if not g4["passed"]:
-        state["comprehensive_plan"] = {"coherence_score": 0.92}
+        plan = await synthesize(csuite_outputs, resolutions)
+        state["comprehensive_plan"] = plan
         g4 = validate_g4(state)
 
     state.setdefault("gate_results", {})["g4"] = g4
