@@ -149,7 +149,7 @@ async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, An
                     ],
                     "runtimeEnvironment": {
                         "SANDBOX_ID": sandbox_id,
-                        "PROJECT_ID": data.get("project_id", ""),
+                        "PROJECT_ID": data.get("project_id") or "",
                         "REDIS_URL": settings.REDIS_URL,
                         "FORGE_API_URL": _get_forge_api_url(),
                         "FORGE_SERVICE_TOKEN": settings.FORGE_SERVICE_TOKEN,
@@ -169,7 +169,17 @@ async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, An
                     ],
                 },
             )
-            resp.raise_for_status()
+
+            # Handle duplicate: if service already exists, fetch it
+            if resp.status_code == 409:
+                resp = await client.get(
+                    f"{base_url}/projects/{project_id}/services/{svc_name}",
+                    headers=headers,
+                )
+                resp.raise_for_status()
+            else:
+                resp.raise_for_status()
+
             result = resp.json()
 
             service_data = result.get("data", result)
@@ -462,6 +472,12 @@ sandbox_lifecycle_fn = forge_inngest.create_function(
     fn_id="sandbox-lifecycle",
     trigger=inngest.TriggerEvent(event="forge/sandbox.lifecycle"),
     retries=3,
+    concurrency=[
+        inngest.Concurrency(
+            limit=1,
+            key="event.data.sandbox_id",
+        ),
+    ],
 )(_sandbox_lifecycle_handler)
 
 

@@ -43,7 +43,7 @@ async function pullFiles() {
   console.log(`[forge-agent] Pulling files for project ${PROJECT_ID}...`);
 
   try {
-    // Fetch file list
+    // Fetch file list (API returns a nested tree)
     const listRes = await fetch(
       `${FORGE_API_URL}/api/v1/projects/${PROJECT_ID}/files`,
       { headers: { Authorization: `Bearer ${FORGE_SERVICE_TOKEN}` } },
@@ -53,12 +53,25 @@ async function pullFiles() {
       throw new Error(`Failed to list files: ${listRes.status} ${await listRes.text()}`);
     }
 
-    const files = await listRes.json();
+    const tree = await listRes.json();
+
+    // Flatten tree → array of file nodes
+    function flattenTree(nodes) {
+      const flat = [];
+      for (const node of nodes) {
+        if (node.type === "file") {
+          flat.push(node);
+        } else if (node.children) {
+          flat.push(...flattenTree(node.children));
+        }
+      }
+      return flat;
+    }
+    const files = flattenTree(tree);
 
     // Download each file
+    let pulled = 0;
     for (const file of files) {
-      if (file.type === "directory") continue;
-
       const contentRes = await fetch(
         `${FORGE_API_URL}/api/v1/projects/${PROJECT_ID}/files/content?path=${encodeURIComponent(file.path)}`,
         { headers: { Authorization: `Bearer ${FORGE_SERVICE_TOKEN}` } },
@@ -73,9 +86,10 @@ async function pullFiles() {
       const fullPath = join(APP_DIR, file.path);
       mkdirSync(dirname(fullPath), { recursive: true });
       writeFileSync(fullPath, data.content || "", "utf-8");
+      pulled++;
     }
 
-    console.log(`[forge-agent] Pulled ${files.length} files`);
+    console.log(`[forge-agent] Pulled ${pulled} files`);
   } catch (err) {
     console.error("[forge-agent] Pull failed:", err.message);
     status = "error";

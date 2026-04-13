@@ -29,6 +29,18 @@ async def claim_or_provision_sandbox(project_id: uuid.UUID) -> str:
         )
         existing = result.scalars().first()
         if existing:
+            # Re-trigger provisioning if container was never created
+            if not existing.northflank_service_id:
+                await forge_inngest.send(
+                    inngest.Event(
+                        name="forge/sandbox.lifecycle",
+                        data={
+                            "action": "provision",
+                            "sandbox_id": str(existing.id),
+                            "project_id": str(project_id),
+                        },
+                    )
+                )
             return str(existing.id)
 
     # 2. Claim a warm sandbox

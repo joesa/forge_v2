@@ -71,7 +71,7 @@ inngest_serve(
         build_run_fn,
         idea_generation_fn,
         sandbox_lifecycle_fn,
-        pool_replenish_fn,
+        # pool_replenish_fn,  # disabled: creates Northflank services unmanaged
     ],
     serve_path="/api/inngest",
 )
