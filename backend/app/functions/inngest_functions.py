@@ -108,8 +108,8 @@ async def mark_idea_session_complete(session_id: str) -> None:
 async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, Any]:
     """Call Northflank REST API for sandbox VM lifecycle operations.
 
-    Provisions Docker-based services from the forge sandbox image.
-    Returns service metadata including public URL.
+    Each sandbox is a deployment service pulling the image built by the
+    'sandbox-image' build service in the same project.
     """
     base_url = "https://api.northflank.com/v1"
     headers = {
@@ -124,15 +124,22 @@ async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, An
             svc_name = f"sandbox-{sandbox_id[:12]}"
 
             resp = await client.post(
-                f"{base_url}/projects/{project_id}/services/combined",
+                f"{base_url}/projects/{project_id}/services/deployment",
                 headers=headers,
                 json={
                     "name": svc_name,
                     "description": f"Forge sandbox {sandbox_id}",
-                    "billing": {"deploymentPlan": "nf-compute-20"},
+                    "billing": {"deploymentPlan": settings.NORTHFLANK_SANDBOX_PLAN},
                     "deployment": {
-                        "external": {
-                            "imagePath": settings.NORTHFLANK_DOCKER_IMAGE,
+                        "instances": 1,
+                        "docker": {"configType": "default"},
+                        "internal": {
+                            "id": settings.NORTHFLANK_BUILD_SERVICE_ID,
+                            "branch": "master",
+                            "buildSHA": "latest",
+                        },
+                        "storage": {
+                            "ephemeralStorage": {"storageSize": 2048},
                         },
                     },
                     "ports": [
@@ -150,10 +157,13 @@ async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, An
                     "healthChecks": [
                         {
                             "protocol": "HTTP",
+                            "type": "readinessProbe",
                             "port": 9999,
                             "path": "/health",
                             "initialDelaySeconds": 10,
                             "periodSeconds": 10,
+                            "timeoutSeconds": 5,
+                            "failureThreshold": 3,
                         },
                     ],
                 },
@@ -161,10 +171,10 @@ async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, An
             resp.raise_for_status()
             result = resp.json()
 
-            # Extract the service ID and public URL
             service_data = result.get("data", result)
             nf_service_id = service_data.get("id", "")
-            # Northflank returns ports with public URLs
+
+            # Extract public URL from ports DNS
             ports = service_data.get("ports", [])
             app_url = ""
             for port in ports:
@@ -172,9 +182,9 @@ async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, An
                     app_url = f"https://{port['dns']}"
                     break
 
-            # If no URL yet (service still provisioning), construct from convention
+            # Fallback: construct from Northflank DNS convention
             if not app_url and nf_service_id:
-                app_url = f"https://{svc_name}--{project_id}.code.run"
+                app_url = f"https://app--{nf_service_id}--{project_id}.code.run"
 
             return {
                 "northflank_service_id": nf_service_id,

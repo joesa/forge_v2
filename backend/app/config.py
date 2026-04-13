@@ -43,7 +43,8 @@ class Settings(BaseSettings):
     # ── Northflank ───────────────────────────────────────────────
     NORTHFLANK_API_KEY: str = ""
     NORTHFLANK_PROJECT_ID: str = ""
-    NORTHFLANK_DOCKER_IMAGE: str = "ghcr.io/forgedev/sandbox:latest"
+    NORTHFLANK_BUILD_SERVICE_ID: str = "sandbox-image"
+    NORTHFLANK_SANDBOX_PLAN: str = "nf-compute-200"
     FORGE_SERVICE_TOKEN: str = ""  # service-to-service auth for sandbox agent
 
     # ── Redis ────────────────────────────────────────────────────
