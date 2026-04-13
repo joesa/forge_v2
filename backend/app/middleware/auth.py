@@ -28,6 +28,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse(status_code=401, content={"detail": "Missing bearer token"})
 
         token = auth_header[7:]
+
+        # Service-to-service auth (sandbox agent → backend)
+        if settings.FORGE_SERVICE_TOKEN and token == settings.FORGE_SERVICE_TOKEN:
+            request.state.user_id = None  # service call, no user context
+            request.state.is_service = True
+            return await call_next(request)
+
         try:
             payload = jwt.decode(
                 token,
@@ -36,6 +43,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 audience="authenticated",
             )
             request.state.user_id = UUID(payload["sub"])
+            request.state.is_service = False
         except (JWTError, KeyError, ValueError):
             return JSONResponse(status_code=401, content={"detail": "Invalid token"})
 

@@ -1,7 +1,9 @@
-"""Agent 2: Router — Layer 2 inject routes, generate all route stubs."""
+"""Agent 2: Router — generate routes and page stubs from plan."""
 from __future__ import annotations
 
-from app.agents.build.base import BaseBuildAgent, TEMPERATURE, SEED
+import json
+
+from app.agents.build.base import BaseBuildAgent
 from app.agents.state import PipelineState
 
 
@@ -11,51 +13,34 @@ class RouterAgent(BaseBuildAgent):
 
     async def _run(self, state: PipelineState) -> dict[str, str]:
         plan = state.get("comprehensive_plan", {})
-        spec_outputs = state.get("spec_outputs", {})
+        idea_spec = state.get("idea_spec", {})
+        existing_files = state.get("generated_files", {})
 
-        # Extract routes from plan
         pages = plan.get("pages", [
             {"name": "Home", "path": "/", "component": "HomePage"},
             {"name": "Dashboard", "path": "/dashboard", "component": "DashboardPage"},
             {"name": "NotFound", "path": "*", "component": "NotFoundPage"},
         ])
 
-        # Build route imports and elements
-        imports: list[str] = []
-        routes: list[str] = []
+        system_prompt = (
+            "You are a senior React developer. Generate the routing configuration and page stub files "
+            "for a React + TypeScript app using react-router-dom v6.\n\n"
+            "Return a JSON object where each key is a file path and value is the complete file content.\n\n"
+            "Requirements:\n"
+            "- src/routes.tsx: AppRoutes component using <Routes> and <Route> from react-router-dom\n"
+            "- One src/pages/<name>.tsx file per page with a real, functional stub component\n"
+            "- Each page should have meaningful placeholder content that reflects its purpose\n"
+            "- Use proper TypeScript and export named functions\n"
+            "- Import all page components in routes.tsx\n"
+            "- Include a catch-all NotFound route with path='*'\n"
+            "- Page components should have appropriate Tailwind styling"
+        )
 
-        for page in pages:
-            component = page.get("component", page.get("name", "Page"))
-            path = page.get("path", "/")
-            # Derive import path from component name
-            module = component[0].lower() + component[1:]
-            imports.append(f"import {{ {component} }} from './pages/{module}';")
-            routes.append(f'      <Route path="{path}" element={{<{component} />}} />')
+        user_prompt = (
+            f"App: {idea_spec.get('name', 'App')}\n"
+            f"Description: {idea_spec.get('description', '')}\n"
+            f"Pages from plan: {json.dumps(pages, default=str)}\n"
+            f"Existing files: {json.dumps(list(existing_files.keys()))}"
+        )
 
-        imports_str = "\n".join(imports)
-        routes_str = "\n".join(routes)
-
-        routes_file = f"""import {{ Routes, Route }} from 'react-router-dom';
-{imports_str}
-
-export function AppRoutes() {{
-  return (
-    <Routes>
-{routes_str}
-    </Routes>
-  );
-}}"""
-
-        files: dict[str, str] = {
-            "src/routes.tsx": routes_file,
-        }
-
-        # Generate stub page files so imports resolve
-        for page in pages:
-            component = page.get("component", page.get("name", "Page"))
-            module = component[0].lower() + component[1:]
-            files[f"src/pages/{module}.tsx"] = f"""export function {component}() {{
-  return <div>{component}</div>;
-}}"""
-
-        return files
+        return await self._call_llm(system_prompt, user_prompt)

@@ -1,7 +1,9 @@
-"""Agent 7: Auth — Layer 5 auth pattern from pattern library."""
+"""Agent 7: Auth — generate authentication layer."""
 from __future__ import annotations
 
-from app.agents.build.base import BaseBuildAgent, TEMPERATURE, SEED
+import json
+
+from app.agents.build.base import BaseBuildAgent
 from app.agents.state import PipelineState
 
 
@@ -12,102 +14,36 @@ class AuthAgent(BaseBuildAgent):
     async def _run(self, state: PipelineState) -> dict[str, str]:
         plan = state.get("comprehensive_plan", {})
         idea_spec = state.get("idea_spec", {})
+        existing_files = state.get("generated_files", {})
 
-        # Determine auth strategy from plan
         auth_strategy = plan.get("auth_strategy", idea_spec.get("auth_strategy", "supabase"))
 
-        files: dict[str, str] = {}
+        # Provide the supabase client code as context if it exists
+        context_files = {
+            k: v for k, v in existing_files.items()
+            if k in ("src/lib/supabase.ts", "src/types/database.ts", "src/routes.tsx")
+        }
 
-        # Auth context provider
-        files["src/lib/auth.ts"] = """import { supabase } from './supabase';
-import type { User, Session } from '@supabase/supabase-js';
+        system_prompt = (
+            "You are a senior React + TypeScript developer. Generate the authentication layer.\n\n"
+            "Return a JSON object where each key is a file path and value is the complete file content.\n\n"
+            "Requirements:\n"
+            "- src/lib/auth.ts: Auth functions (signIn, signUp, signOut, getSession, onAuthStateChange)\n"
+            "  using the Supabase client from ./supabase\n"
+            "- src/hooks/useAuth.ts: React hook that tracks user, session, loading state\n"
+            "- src/components/protectedRoute.tsx: ProtectedRoute component that redirects to /login\n"
+            "- All functions must have proper TypeScript types\n"
+            "- Use @supabase/supabase-js types (User, Session)\n"
+            "- The hook should subscribe to auth state changes and clean up on unmount\n"
+            "- ProtectedRoute should show a loading state while checking auth"
+        )
 
-export type AuthState = {
-  user: User | null;
-  session: Session | null;
-  loading: boolean;
-};
+        user_prompt = (
+            f"App: {idea_spec.get('name', 'App')}\n"
+            f"Description: {idea_spec.get('description', '')}\n"
+            f"Auth strategy: {auth_strategy}\n"
+            f"Existing related files:\n{json.dumps(context_files, default=str)}\n"
+            f"All existing files: {json.dumps(list(existing_files.keys()))}"
+        )
 
-export async function signIn(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  return data;
-}
-
-export async function signUp(email: string, password: string) {
-  const { data, error } = await supabase.auth.signUp({ email, password });
-  if (error) throw error;
-  return data;
-}
-
-export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
-}
-
-export async function getSession() {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
-  return data.session;
-}
-
-export function onAuthStateChange(callback: (session: Session | null) => void) {
-  return supabase.auth.onAuthStateChange((_event, session) => {
-    callback(session);
-  });
-}
-"""
-
-        # Auth hook
-        files["src/hooks/useAuth.ts"] = """import { useState, useEffect } from 'react';
-import type { User, Session } from '@supabase/supabase-js';
-import { getSession, onAuthStateChange } from '../lib/auth';
-
-export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getSession().then((s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = onAuthStateChange((s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  return { user, session, loading };
-}
-"""
-
-        # Protected route component
-        files["src/components/protectedRoute.tsx"] = """import { Navigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
-
-interface ProtectedRouteProps {
-  children: React.ReactNode;
-}
-
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return <>{children}</>;
-}
-"""
-
-        return files
+        return await self._call_llm(system_prompt, user_prompt)

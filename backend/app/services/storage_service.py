@@ -30,5 +30,25 @@ async def list_files(bucket: str, prefix: str = "") -> list[str]:
     ]
 
 
+async def list_files_recursive(bucket: str, prefix: str = "") -> list[str]:
+    """Recursively list all files under a prefix, returning paths relative to prefix."""
+    result: list[str] = []
+    items = _client.storage.from_(bucket).list(prefix)
+    for item in items:
+        name = item.get("name")
+        if not name:
+            continue
+        full = f"{prefix}/{name}" if prefix else name
+        # Supabase storage: directories have id=None, files have a non-null id
+        if item.get("id") is None:
+            # It's a directory — recurse
+            children = await list_files_recursive(bucket, full)
+            for child in children:
+                result.append(f"{name}/{child}")
+        else:
+            result.append(name)
+    return result
+
+
 async def signed_url(bucket: str, path: str, expires_in: int = 3600) -> str:
     return _client.storage.from_(bucket).create_signed_url(path, expires_in)["signedURL"]

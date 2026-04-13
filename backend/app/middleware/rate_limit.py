@@ -1,9 +1,10 @@
 import time
 
-from fastapi import Request, HTTPException
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
+from app.config import settings
 from app.core.redis import redis_client
 
 _STRICT_PREFIXES = ("/api/v1/pipeline", "/api/v1/ai")
@@ -14,7 +15,7 @@ _WINDOW = 60  # seconds
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        if redis_client is None:
+        if redis_client is None or settings.FORGE_ENV == "development":
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"
@@ -37,9 +38,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         count = results[2]
         if count > limit:
             retry_after = int(_WINDOW - (now - window_start))
-            raise HTTPException(
+            return JSONResponse(
                 status_code=429,
-                detail="Too many requests",
+                content={"detail": "Too many requests"},
                 headers={"Retry-After": str(max(retry_after, 1))},
             )
 

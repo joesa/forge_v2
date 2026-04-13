@@ -1,7 +1,9 @@
-"""Agent 4: Page — Layer 2 inject prop types, Layer 6 ErrorBoundary injection."""
+"""Agent 4: Page — generate full page implementations with ErrorBoundary."""
 from __future__ import annotations
 
-from app.agents.build.base import BaseBuildAgent, TEMPERATURE, SEED
+import json
+
+from app.agents.build.base import BaseBuildAgent
 from app.agents.state import PipelineState
 
 
@@ -11,7 +13,7 @@ class PageAgent(BaseBuildAgent):
 
     async def _run(self, state: PipelineState) -> dict[str, str]:
         plan = state.get("comprehensive_plan", {})
-        spec_outputs = state.get("spec_outputs", {})
+        idea_spec = state.get("idea_spec", {})
         existing_files = state.get("generated_files", {})
 
         pages = plan.get("pages", [
@@ -20,66 +22,34 @@ class PageAgent(BaseBuildAgent):
             {"name": "NotFound", "path": "*", "component": "NotFoundPage"},
         ])
 
-        files: dict[str, str] = {}
+        # Provide existing component/route code as context
+        context_files = {
+            k: v for k, v in existing_files.items()
+            if k.startswith("src/components/") or k == "src/routes.tsx"
+        }
 
-        # Layer 6: Generate ErrorBoundary component
-        files["src/components/errorBoundary.tsx"] = """import { Component } from 'react';
-import type { ReactNode, ErrorInfo } from 'react';
+        system_prompt = (
+            "You are a senior React + TypeScript developer. Generate full page implementations.\n\n"
+            "Return a JSON object where each key is a file path and value is the complete file content.\n\n"
+            "Requirements:\n"
+            "- Generate src/components/errorBoundary.tsx (React class component ErrorBoundary)\n"
+            "- Generate each page in src/pages/<name>.tsx\n"
+            "- Each page MUST be wrapped in <ErrorBoundary>\n"
+            "- Pages should have real, functional UI appropriate to the app's purpose\n"
+            "- Import and use existing components where it makes sense\n"
+            "- Use Tailwind CSS for styling — make pages visually appealing\n"
+            "- Include state management with useState/useEffect where appropriate\n"
+            "- Dashboard pages should have mock data visualizations or card layouts\n"
+            "- Home pages should have a hero section and feature highlights\n"
+            "- All code must be strict TypeScript"
+        )
 
-interface ErrorBoundaryProps {
-  children: ReactNode;
-  fallback?: ReactNode;
-}
+        user_prompt = (
+            f"App: {idea_spec.get('name', 'App')}\n"
+            f"Description: {idea_spec.get('description', '')}\n"
+            f"Pages from plan: {json.dumps(pages, default=str)}\n"
+            f"Existing components and routes:\n{json.dumps(context_files, default=str)}\n"
+            f"All existing files: {json.dumps(list(existing_files.keys()))}"
+        )
 
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('ErrorBoundary caught:', error, errorInfo);
-  }
-
-  render(): ReactNode {
-    if (this.state.hasError) {
-      return this.props.fallback ?? (
-        <div className="p-4 text-center">
-          <h2 className="text-xl font-bold text-red-500">Something went wrong</h2>
-          <p className="text-gray-400 mt-2">{this.state.error?.message}</p>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}"""
-
-        # Generate full page implementations with ErrorBoundary wrapping
-        for page in pages:
-            component = page.get("component", page.get("name", "Page"))
-            module = component[0].lower() + component[1:]
-            path = page.get("path", "/")
-
-            page_content = f"""import {{ ErrorBoundary }} from '../components/errorBoundary';
-
-export function {component}() {{
-  return (
-    <ErrorBoundary>
-      <div className="min-h-screen p-8">
-        <h1 className="text-2xl font-bold">{component.replace('Page', '')}</h1>
-      </div>
-    </ErrorBoundary>
-  );
-}}"""
-            files[f"src/pages/{module}.tsx"] = page_content
-
-        return files
+        return await self._call_llm(system_prompt, user_prompt)

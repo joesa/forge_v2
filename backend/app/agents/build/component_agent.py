@@ -1,7 +1,9 @@
 """Agent 3: Component — Layer 2 inject Zod schemas, generate UI components."""
 from __future__ import annotations
 
-from app.agents.build.base import BaseBuildAgent, TEMPERATURE, SEED
+import json
+
+from app.agents.build.base import BaseBuildAgent
 from app.agents.state import PipelineState
 
 
@@ -11,64 +13,40 @@ class ComponentAgent(BaseBuildAgent):
 
     async def _run(self, state: PipelineState) -> dict[str, str]:
         plan = state.get("comprehensive_plan", {})
+        idea_spec = state.get("idea_spec", {})
         spec_outputs = state.get("spec_outputs", {})
+        existing_files = state.get("generated_files", {})
 
-        # Layer 2: Get Zod schemas and TS interfaces from spec
         zod_schemas = spec_outputs.get("zod_schemas", "")
         ts_interfaces = spec_outputs.get("ts_interfaces", "")
-
-        # Extract components from plan
         components = plan.get("components", [
             {"name": "Header", "props": []},
             {"name": "Footer", "props": []},
             {"name": "Layout", "props": ["children"]},
         ])
 
-        files: dict[str, str] = {}
+        system_prompt = (
+            "You are a senior React + TypeScript developer. Generate reusable UI components.\n\n"
+            "Return a JSON object where each key is a file path and value is the complete file content.\n\n"
+            "Requirements:\n"
+            "- Generate each component in src/components/<name>.tsx\n"
+            "- Create src/components/index.ts barrel export file\n"
+            "- If Zod schemas are provided, create src/lib/schemas.ts\n"
+            "- If TypeScript interfaces are provided, create src/types/models.ts\n"
+            "- Components must be functional React components with proper TypeScript props interfaces\n"
+            "- Use Tailwind CSS for styling\n"
+            "- Components should be production-quality with real, useful UI — not just placeholders\n"
+            "- Each component should render meaningful content appropriate to its purpose\n"
+            "- Include a Layout component that wraps children with a header and navigation"
+        )
 
-        # Write shared types from Layer 2
-        if ts_interfaces:
-            files["src/types/models.ts"] = ts_interfaces
+        user_prompt = (
+            f"App: {idea_spec.get('name', 'App')}\n"
+            f"Description: {idea_spec.get('description', '')}\n"
+            f"Components from plan: {json.dumps(components, default=str)}\n"
+            f"Zod schemas:\n{zod_schemas or '(none)'}\n\n"
+            f"TypeScript interfaces:\n{ts_interfaces or '(none)'}\n\n"
+            f"Existing files: {json.dumps(list(existing_files.keys()))}"
+        )
 
-        if zod_schemas:
-            files["src/lib/schemas.ts"] = f"import {{ z }} from 'zod';\n\n{zod_schemas}"
-
-        # Generate components
-        for comp in components:
-            name = comp.get("name", "Component")
-            props = comp.get("props", [])
-            filename = name[0].lower() + name[1:]
-
-            if props:
-                props_type = f"interface {name}Props {{\n"
-                for p in props:
-                    if p == "children":
-                        props_type += "  children: React.ReactNode;\n"
-                    else:
-                        props_type += f"  {p}: string;\n"
-                props_type += "}"
-                props_param = f"{{ {', '.join(props)} }}: {name}Props"
-                props_block = f"\n{props_type}\n\n"
-            else:
-                props_param = ""
-                props_block = "\n"
-
-            files[f"src/components/{filename}.tsx"] = f"""{props_block}export function {name}({props_param}) {{
-  return (
-    <div className="{filename}">
-      {name}
-    </div>
-  );
-}}"""
-
-        # Barrel export
-        export_lines = []
-        for comp in components:
-            name = comp.get("name", "Component")
-            filename = name[0].lower() + name[1:]
-            export_lines.append(f"export {{ {name} }} from './{filename}';")
-
-        if export_lines:
-            files["src/components/index.ts"] = "\n".join(export_lines) + "\n"
-
-        return files
+        return await self._call_llm(system_prompt, user_prompt)

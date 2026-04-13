@@ -4,8 +4,10 @@ import json
 from uuid import UUID
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from jose import jwt, JWTError
 from pydantic import BaseModel
 
+from app.config import settings
 from app.core.redis import redis_client
 from app.services import pipeline_service
 
@@ -58,6 +60,23 @@ async def get_stages(request: Request, pipeline_id: UUID):
 async def stream_pipeline(websocket: WebSocket, pipeline_id: UUID):
     await websocket.accept()
 
+    # First message must be a valid JWT — HTTP middleware doesn't cover WS
+    auth_msg = await websocket.receive_text()
+    try:
+        payload = jwt.decode(
+            auth_msg,
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+        user_id = UUID(payload["sub"])
+    except (JWTError, KeyError, ValueError):
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
+    # Verify the user owns this pipeline run
+    await pipeline_service.get_pipeline_status(pipeline_id, user_id)
+
     if redis_client is None:
         await websocket.close(code=1011, reason="Redis unavailable")
         return
@@ -74,8 +93,8 @@ async def stream_pipeline(websocket: WebSocket, pipeline_id: UUID):
             data = json.loads(message["data"])
             await websocket.send_json(data)
 
-            # Close when pipeline ends
-            if data.get("status") in ("completed", "failed"):
+            # Close only on pipeline-level completion (not individual stage completions)
+            if data.get("type") == "pipeline_complete":
                 break
     except WebSocketDisconnect:
         pass

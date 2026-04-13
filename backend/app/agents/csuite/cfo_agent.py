@@ -8,15 +8,13 @@ class CFOAgent(BaseCSuiteAgent):
     name = "cfo"
     schema = CFOOutput
 
-    async def _run(self, idea_spec: dict) -> dict:
-        return {
-            "pricing_strategy": "Freemium with Pro ($29/mo) and Enterprise (custom) tiers",
-            "unit_economics": {
-                "cost_per_build": "$0.12 (AI tokens + compute)",
-                "avg_revenue_per_user": "$14.50/mo blended",
-                "gross_margin": "78%",
-            },
-            "cac_estimate": "$35 blended across organic and paid channels",
-            "ltv_estimate": "$290 assuming 20-month average retention",
-            "breakeven_analysis": "Breakeven at ~2,500 paying users with current cost structure",
-        }
+    def _system_prompt(self) -> str:
+        return (
+            "You are a CFO agent. Given an app idea, define a pricing strategy, estimate unit "
+            "economics (cost per user, ARPU, gross margin), estimate CAC and LTV, and provide "
+            "a breakeven analysis. Be specific to the type of product described."
+        )
+
+    def _user_prompt(self, idea_spec: dict) -> str:
+        desc = idea_spec.get("description", "")
+        return f"App idea: {desc}"

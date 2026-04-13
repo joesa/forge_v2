@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from typing import Any
@@ -17,6 +18,7 @@ from app.models.idea_session import IdeaSession
 from app.models.pipeline_run import PipelineRun, PipelineStatus
 from app.models.sandbox import Sandbox, SandboxStatus
 
+logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────
 # Helper functions
@@ -34,14 +36,18 @@ async def update_pipeline_status(pipeline_id: str, status: str) -> None:
 
 async def run_pipeline_graph(data: dict[str, Any]) -> None:
     """Execute the LangGraph pipeline graph."""
-    from app.pipeline.graph import execute_pipeline  # type: ignore[import-not-found]
+    from app.pipeline.graph import execute_pipeline
 
-    await execute_pipeline(
-        pipeline_id=data["pipeline_id"],
-        project_id=data["project_id"],
-        user_id=data["user_id"],
-        idea_spec=data["idea_spec"],
-    )
+    try:
+        await execute_pipeline(
+            pipeline_id=data["pipeline_id"],
+            project_id=data["project_id"],
+            user_id=data["user_id"],
+            idea_spec=data["idea_spec"],
+        )
+    except Exception:
+        logger.exception("Pipeline execution failed for %s", data.get("pipeline_id"))
+        raise
 
 
 async def update_build_status(build_id: str, status: str) -> None:
@@ -56,7 +62,7 @@ async def update_build_status(build_id: str, status: str) -> None:
 
 async def run_build_agents(data: dict[str, Any]) -> None:
     """Run Stage 6 build agents for a standalone rebuild."""
-    from app.pipeline.graph import execute_build_stage  # type: ignore[import-not-found]
+    from app.pipeline.graph import execute_build_stage
 
     await execute_build_stage(
         build_id=data["build_id"],
@@ -66,7 +72,7 @@ async def run_build_agents(data: dict[str, Any]) -> None:
 
 async def generate_five_ideas(answers: dict[str, Any]) -> list[dict[str, Any]]:
     """Generate 5 unique app ideas from questionnaire answers using AI."""
-    from app.pipeline.idea_generator import generate_ideas  # type: ignore[import-not-found]
+    from app.pipeline.idea_generator import generate_ideas
 
     return await generate_ideas(answers, count=5)
 
@@ -100,7 +106,11 @@ async def mark_idea_session_complete(session_id: str) -> None:
 
 
 async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, Any]:
-    """Call Northflank REST API for sandbox VM lifecycle operations."""
+    """Call Northflank REST API for sandbox VM lifecycle operations.
+
+    Provisions Docker-based services from the forge sandbox image.
+    Returns service metadata including public URL.
+    """
     base_url = "https://api.northflank.com/v1"
     headers = {
         "Authorization": f"Bearer {settings.NORTHFLANK_API_KEY}",
@@ -110,17 +120,67 @@ async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, An
 
     async with httpx.AsyncClient(timeout=60) as client:
         if action == "provision":
+            sandbox_id = data.get("sandbox_id", uuid.uuid4().hex[:8])
+            svc_name = f"sandbox-{sandbox_id[:12]}"
+
             resp = await client.post(
-                f"{base_url}/projects/{project_id}/services",
+                f"{base_url}/projects/{project_id}/services/combined",
                 headers=headers,
                 json={
-                    "name": f"sandbox-{data.get('sandbox_id', uuid.uuid4().hex[:8])}",
-                    "type": "combined",
+                    "name": svc_name,
+                    "description": f"Forge sandbox {sandbox_id}",
                     "billing": {"deploymentPlan": "nf-compute-20"},
+                    "deployment": {
+                        "external": {
+                            "imagePath": settings.NORTHFLANK_DOCKER_IMAGE,
+                        },
+                    },
+                    "ports": [
+                        {"name": "app", "internalPort": 3000, "public": True, "protocol": "HTTP"},
+                        {"name": "agent", "internalPort": 9999, "public": True, "protocol": "HTTP"},
+                        {"name": "hmr", "internalPort": 24678, "public": True, "protocol": "HTTP"},
+                    ],
+                    "runtimeEnvironment": {
+                        "SANDBOX_ID": sandbox_id,
+                        "PROJECT_ID": data.get("project_id", ""),
+                        "REDIS_URL": settings.REDIS_URL,
+                        "FORGE_API_URL": _get_forge_api_url(),
+                        "FORGE_SERVICE_TOKEN": settings.FORGE_SERVICE_TOKEN,
+                    },
+                    "healthChecks": [
+                        {
+                            "protocol": "HTTP",
+                            "port": 9999,
+                            "path": "/health",
+                            "initialDelaySeconds": 10,
+                            "periodSeconds": 10,
+                        },
+                    ],
                 },
             )
             resp.raise_for_status()
-            return resp.json()
+            result = resp.json()
+
+            # Extract the service ID and public URL
+            service_data = result.get("data", result)
+            nf_service_id = service_data.get("id", "")
+            # Northflank returns ports with public URLs
+            ports = service_data.get("ports", [])
+            app_url = ""
+            for port in ports:
+                if port.get("name") == "app" and port.get("dns"):
+                    app_url = f"https://{port['dns']}"
+                    break
+
+            # If no URL yet (service still provisioning), construct from convention
+            if not app_url and nf_service_id:
+                app_url = f"https://{svc_name}--{project_id}.code.run"
+
+            return {
+                "northflank_service_id": nf_service_id,
+                "sandbox_url": app_url,
+                "sandbox_id": sandbox_id,
+            }
 
         elif action == "start":
             resp = await client.post(
@@ -148,6 +208,58 @@ async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, An
 
         else:
             raise ValueError(f"Unknown sandbox action: {action}")
+
+
+def _get_forge_api_url() -> str:
+    """Return the public backend URL for sandbox→backend communication."""
+    if settings.FORGE_ENV == "development":
+        return "http://host.docker.internal:8000"
+    return f"https://api.{settings.PREVIEW_DOMAIN.replace('preview.', '')}"
+
+
+async def register_sandbox_url_in_kv(sandbox_id: str, sandbox_url: str) -> None:
+    """Write sandbox URL to Cloudflare KV so the preview proxy can route to it."""
+    if not settings.CLOUDFLARE_API_TOKEN or not settings.CLOUDFLARE_KV_NAMESPACE_ID:
+        logger.warning("Cloudflare KV not configured — skipping URL registration for %s", sandbox_id)
+        return
+
+    kv_url = (
+        f"https://api.cloudflare.com/client/v4/accounts/{settings.CLOUDFLARE_ACCOUNT_ID}"
+        f"/storage/kv/namespaces/{settings.CLOUDFLARE_KV_NAMESPACE_ID}"
+        f"/values/sandbox:{sandbox_id}:url"
+    )
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.put(
+            kv_url,
+            headers={
+                "Authorization": f"Bearer {settings.CLOUDFLARE_API_TOKEN}",
+                "Content-Type": "text/plain",
+            },
+            content=sandbox_url,
+        )
+        if resp.is_success:
+            logger.info("Registered sandbox %s → %s in CF KV", sandbox_id, sandbox_url)
+        else:
+            logger.error("Failed to register in CF KV: %s %s", resp.status_code, resp.text)
+
+
+async def deregister_sandbox_url_from_kv(sandbox_id: str) -> None:
+    """Remove sandbox URL from Cloudflare KV."""
+    if not settings.CLOUDFLARE_API_TOKEN or not settings.CLOUDFLARE_KV_NAMESPACE_ID:
+        return
+
+    kv_url = (
+        f"https://api.cloudflare.com/client/v4/accounts/{settings.CLOUDFLARE_ACCOUNT_ID}"
+        f"/storage/kv/namespaces/{settings.CLOUDFLARE_KV_NAMESPACE_ID}"
+        f"/values/sandbox:{sandbox_id}:url"
+    )
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        await client.delete(
+            kv_url,
+            headers={"Authorization": f"Bearer {settings.CLOUDFLARE_API_TOKEN}"},
+        )
 
 
 def action_to_status(action: str) -> str:
@@ -289,12 +401,44 @@ async def _sandbox_lifecycle_handler(
 ) -> None:
     data = ctx.event.data
     action = data["action"]
+    sandbox_id = data.get("sandbox_id")
 
-    await step.run(f"northflank-{action}", call_northflank_api, action, data)
+    result = await step.run(f"northflank-{action}", call_northflank_api, action, data)
+
+    if action == "provision" and result:
+        # Save Northflank service ID on the sandbox row
+        nf_service_id = result.get("northflank_service_id", "")
+        sandbox_url = result.get("sandbox_url", "")
+
+        async def _save_nf_service_id() -> None:
+            if not sandbox_id or not nf_service_id:
+                return
+            async with get_write_session() as db:
+                row = await db.execute(
+                    select(Sandbox).where(Sandbox.id == uuid.UUID(sandbox_id))
+                )
+                sandbox = row.scalar_one_or_none()
+                if sandbox:
+                    sandbox.northflank_service_id = nf_service_id
+
+        await step.run("save-service-id", _save_nf_service_id)
+
+        # Register the sandbox URL in Cloudflare KV for the preview proxy
+        if sandbox_url and sandbox_id:
+            await step.run(
+                "register-kv",
+                register_sandbox_url_in_kv,
+                sandbox_id,
+                sandbox_url,
+            )
+
+    if action == "destroy" and sandbox_id:
+        await step.run("deregister-kv", deregister_sandbox_url_from_kv, sandbox_id)
+
     await step.run(
         "update-sandbox-status",
         update_sandbox_status,
-        data.get("sandbox_id"),
+        sandbox_id,
         action_to_status(action),
     )
 

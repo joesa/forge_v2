@@ -8,15 +8,14 @@ class CEOAgent(BaseCSuiteAgent):
     name = "ceo"
     schema = CEOOutput
 
-    async def _run(self, idea_spec: dict) -> dict:
-        description = idea_spec.get("description", "")
-        return {
-            "market_opportunity": {
-                "tam": f"Total addressable market for: {description[:80]}",
-                "sam": "Subset of TAM reachable with current model",
-                "som": "Realistic obtainable market in year 1",
-            },
-            "business_model": "SaaS subscription with usage-based tiers",
-            "revenue_strategy": "Freemium → Pro conversion with enterprise upsell",
-            "competitive_moat": "AI-native development speed + zero-broken-build guarantee",
-        }
+    def _system_prompt(self) -> str:
+        return (
+            "You are a startup CEO agent. Given an app idea, analyze the market opportunity, "
+            "business model, revenue strategy, and competitive moat. Be specific to the idea — "
+            "do NOT give generic advice. Quantify TAM/SAM/SOM where possible."
+        )
+
+    def _user_prompt(self, idea_spec: dict) -> str:
+        desc = idea_spec.get("description", "")
+        framework = idea_spec.get("framework", "")
+        return f"App idea: {desc}\nFramework: {framework}"

@@ -163,8 +163,16 @@ start_frontend() {
         return 0
     fi
     log "Starting Frontend (Vite :5173)..."
+    # Kill any orphan process on 5173 before starting
+    local stale_pid
+    stale_pid=$(lsof -ti:5173 -sTCP:LISTEN 2>/dev/null || true)
+    if [[ -n "$stale_pid" ]]; then
+        warn "Killing orphan process on :5173 (pid $stale_pid)"
+        kill "$stale_pid" 2>/dev/null || true
+        sleep 1
+    fi
     cd "$FRONTEND_DIR"
-    npx vite --host 0.0.0.0 --port 5173 \
+    npx vite --host 0.0.0.0 --port 5173 --strictPort \
         > "$LOG_DIR/frontend.log" 2>&1 &
     echo $! > "$PID_DIR/frontend.pid"
     if wait_for_port 5173 "Frontend"; then

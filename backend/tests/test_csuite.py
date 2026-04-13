@@ -1,4 +1,6 @@
 import asyncio
+import json
+from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
 
@@ -27,6 +29,135 @@ from app.agents.synthesis.synthesizer import synthesize
 from app.agents.validators import validate_g2, validate_g3, validate_g4
 from app.agents.state import PipelineState
 
+
+# ── Fake LLM responses per agent role ────────────────────────────
+
+_FAKE_LLM_RESPONSES: dict[str, dict] = {
+    "ceo": {
+        "market_opportunity": {"tam": "$5B task management", "sam": "$500M SMB segment", "som": "$25M year 1"},
+        "business_model": "Freemium SaaS with team-based pricing",
+        "revenue_strategy": "Free tier → Pro $12/mo → Enterprise custom",
+        "competitive_moat": "AI-powered task prioritization and Kanban automation",
+    },
+    "cto": {
+        "tech_stack_recommendation": {"frontend": "React + TypeScript", "backend": "FastAPI", "database": "PostgreSQL", "hosting": "Northflank"},
+        "api_design": "RESTful with WebSocket for real-time board updates",
+        "scalability_approach": "Horizontal scaling with connection pooling",
+        "technical_risks": ["WebSocket state at scale", "Real-time sync conflicts", "File attachment storage limits"],
+    },
+    "cdo": {
+        "ux_principles": ["Drag-and-drop first", "Minimal clicks to create task", "Clear visual hierarchy"],
+        "design_system_recommendation": "Tailwind with custom Kanban components",
+        "brand_identity": {"primary_color": "#4F46E5", "typography": "Inter", "tone": "Productive and clean"},
+        "user_journey_map": [
+            {"step": "signup", "action": "Create account", "emotion": "curious"},
+            {"step": "onboarding", "action": "Create first board", "emotion": "excited"},
+        ],
+    },
+    "cmo": {
+        "gtm_strategy": "Product-led growth targeting project managers and dev teams",
+        "target_customer_profile": "Small dev teams and freelancers needing visual task management",
+        "growth_channels": ["ProductHunt launch", "Dev community content", "Integrations marketplace"],
+        "positioning_statement": "The simplest Kanban tool for developers",
+    },
+    "cpo": {
+        "feature_prioritization": {
+            "must": ["Kanban boards", "Task CRUD", "User auth", "Drag-and-drop"],
+            "should": ["Labels and filters", "Due dates", "Comments", "Notifications"],
+            "could": ["Time tracking", "Calendar view"],
+            "wont": ["Gantt charts", "Resource management"],
+        },
+        "mvp_scope": "Kanban boards + task CRUD + user auth + real-time sync",
+        "user_stories": [
+            {"title": "Create board", "description": "As a user I can create a new Kanban board", "priority": "must"},
+            {"title": "Add task", "description": "As a user I can add a task to a column", "priority": "must"},
+            {"title": "Drag task", "description": "As a user I can drag tasks between columns", "priority": "must"},
+            {"title": "Edit task", "description": "As a user I can edit task details", "priority": "must"},
+            {"title": "Delete task", "description": "As a user I can delete a task", "priority": "must"},
+            {"title": "Sign up", "description": "As a user I can create an account", "priority": "must"},
+            {"title": "Log in", "description": "As a user I can log in", "priority": "must"},
+            {"title": "Add labels", "description": "As a user I can label tasks", "priority": "should"},
+            {"title": "Filter tasks", "description": "As a user I can filter by label or assignee", "priority": "should"},
+            {"title": "Due dates", "description": "As a user I can set due dates on tasks", "priority": "should"},
+        ],
+        "success_metrics": ["Board created in < 30s", "Zero onboarding failures", "> 50% day-7 retention"],
+    },
+    "cso": {
+        "auth_architecture": "Supabase Auth with JWT/HS256 and RLS",
+        "encryption_requirements": ["TLS 1.3", "AES-256-GCM for API keys", "bcrypt passwords"],
+        "compliance_needs": ["OWASP Top 10", "Input sanitization", "Rate limiting"],
+        "threat_model": [
+            {"threat": "SQL injection", "mitigation": "Parameterized queries", "severity": "high"},
+            {"threat": "XSS", "mitigation": "React auto-escaping", "severity": "high"},
+        ],
+    },
+    "cco": {
+        "regulatory_requirements": ["ToS required", "Cookie consent for EU"],
+        "privacy_policy_requirements": ["Data collection disclosure", "Third-party list"],
+        "gdpr_obligations": ["Consent basis", "Right to erasure", "Data portability"],
+    },
+    "cfo": {
+        "pricing_strategy": "Free for 3 boards, Pro $12/mo unlimited",
+        "unit_economics": {"cost_per_user": "$0.08", "arpu": "$6.50", "gross_margin": "82%"},
+        "cac_estimate": "$18 blended",
+        "ltv_estimate": "$195 at 18-month retention",
+        "breakeven_analysis": "Breakeven at 1,800 paying users",
+    },
+}
+
+
+def _mock_openai_create(agent_name: str):
+    """Return an AsyncMock that returns the fake response for the given agent."""
+    response_data = _FAKE_LLM_RESPONSES.get(agent_name, {})
+
+    async def _create(**kwargs):
+        msg = MagicMock()
+        msg.content = json.dumps(response_data)
+        choice = MagicMock()
+        choice.message = msg
+        resp = MagicMock()
+        resp.choices = [choice]
+        return resp
+
+    return _create
+
+
+@pytest.fixture(autouse=True)
+def mock_openai():
+    """Mock all OpenAI API calls in C-Suite agents to return fake responses."""
+    with patch("app.agents.csuite.base.openai.AsyncOpenAI") as MockClient:
+        instance = MagicMock()
+        MockClient.return_value = instance
+
+        # The create method needs to return different data per agent.
+        # We capture the system prompt to determine which agent is calling.
+        async def _smart_create(**kwargs):
+            messages = kwargs.get("messages", [])
+            system_msg = messages[0]["content"] if messages else ""
+
+            # Map system prompt keywords to agent names
+            agent_map = {
+                "CEO": "ceo", "CTO": "cto", "Chief Design": "cdo",
+                "CMO": "cmo", "CPO": "cpo", "Chief Security": "cso",
+                "Chief Compliance": "cco", "CFO": "cfo",
+            }
+            agent_name = "ceo"
+            for keyword, name in agent_map.items():
+                if keyword.lower() in system_msg.lower():
+                    agent_name = name
+                    break
+
+            response_data = _FAKE_LLM_RESPONSES.get(agent_name, {})
+            msg = MagicMock()
+            msg.content = json.dumps(response_data)
+            choice = MagicMock()
+            choice.message = msg
+            resp = MagicMock()
+            resp.choices = [choice]
+            return resp
+
+        instance.chat.completions.create = _smart_create
+        yield MockClient
 
 IDEA_SPEC = {"description": "A task management app with Kanban boards"}
 

@@ -8,25 +8,13 @@ class CDOAgent(BaseCSuiteAgent):
     name = "cdo"
     schema = CDOOutput
 
-    async def _run(self, idea_spec: dict) -> dict:
-        return {
-            "ux_principles": [
-                "Progressive disclosure",
-                "Immediate feedback",
-                "Consistent visual hierarchy",
-                "Accessibility-first design",
-            ],
-            "design_system_recommendation": "Tailwind CSS with custom design tokens",
-            "brand_identity": {
-                "primary_color": "#6C5CE7",
-                "typography": "Inter / JetBrains Mono",
-                "tone": "Professional yet approachable",
-            },
-            "user_journey_map": [
-                {"step": "landing", "action": "Discover product", "emotion": "curious"},
-                {"step": "onboarding", "action": "Describe idea", "emotion": "excited"},
-                {"step": "building", "action": "Watch pipeline", "emotion": "anticipation"},
-                {"step": "editor", "action": "Customize code", "emotion": "empowered"},
-                {"step": "deploy", "action": "Go live", "emotion": "accomplished"},
-            ],
-        }
+    def _system_prompt(self) -> str:
+        return (
+            "You are a Chief Design Officer agent. Given an app idea, define UX principles, "
+            "recommend a design system, suggest brand identity (colors, typography, tone), "
+            "and map out the user journey specific to this application."
+        )
+
+    def _user_prompt(self, idea_spec: dict) -> str:
+        desc = idea_spec.get("description", "")
+        return f"App idea: {desc}"

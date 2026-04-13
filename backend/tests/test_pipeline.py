@@ -236,14 +236,17 @@ async def test_websocket_cleanup():
 
     with (
         patch("app.api.v1.pipeline.redis_client", mock_redis),
-        patch("app.middleware.auth.jwt") as mock_jwt,
+        patch("app.api.v1.pipeline.jwt") as mock_jwt,
+        patch("app.api.v1.pipeline.pipeline_service") as mock_svc,
     ):
         mock_jwt.decode.return_value = FAKE_JWT_PAYLOAD
+        mock_svc.get_pipeline_status = AsyncMock(return_value={"status": "running"})
         client = TestClient(app)
         with client.websocket_connect(
             f"/api/v1/pipeline/{FAKE_PIPELINE_ID}/stream",
-            headers={"Authorization": "Bearer fake-token"},
         ) as ws:
+            # First message must be the JWT token
+            ws.send_text("fake-token")
             msg = ws.receive_json()
             assert msg["status"] == "completed"
 

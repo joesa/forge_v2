@@ -43,11 +43,15 @@ class Settings(BaseSettings):
     # ── Northflank ───────────────────────────────────────────────
     NORTHFLANK_API_KEY: str = ""
     NORTHFLANK_PROJECT_ID: str = ""
+    NORTHFLANK_DOCKER_IMAGE: str = "ghcr.io/forgedev/sandbox:latest"
+    FORGE_SERVICE_TOKEN: str = ""  # service-to-service auth for sandbox agent
 
     # ── Redis ────────────────────────────────────────────────────
     REDIS_URL: str = ""
 
     # ── Cloudflare ───────────────────────────────────────────────
+    CLOUDFLARE_ACCOUNT_ID: str = ""
+    CLOUDFLARE_API_TOKEN: str = ""
     CLOUDFLARE_KV_NAMESPACE_ID: str = ""
     PREVIEW_DOMAIN: str = "preview.forge.dev"
 

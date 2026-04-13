@@ -7,7 +7,60 @@ from sqlalchemy import select
 
 from app.core.database import get_read_session, get_write_session
 from app.inngest_client import forge_inngest
+from app.models.project import Project
 from app.models.sandbox import Sandbox, SandboxStatus
+
+
+async def claim_or_provision_sandbox(project_id: uuid.UUID) -> str:
+    """Claim a warm sandbox or provision a new one. Returns sandbox_id.
+
+    Flow:
+      1. Check if project already has an active sandbox → return it
+      2. Try to claim a warm sandbox from the pool
+      3. If no warm sandbox available, provision a new one
+    """
+    # 1. Existing sandbox for this project?
+    async with get_read_session() as db:
+        result = await db.execute(
+            select(Sandbox).where(
+                Sandbox.project_id == project_id,
+                Sandbox.status.in_([SandboxStatus.claimed, SandboxStatus.warm, SandboxStatus.building]),
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            return str(existing.id)
+
+    # 2. Claim a warm sandbox
+    async with get_write_session() as db:
+        result = await db.execute(
+            select(Sandbox)
+            .where(Sandbox.status == SandboxStatus.warm, Sandbox.project_id.is_(None))
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        warm = result.scalar_one_or_none()
+        if warm:
+            warm.project_id = project_id
+            warm.status = SandboxStatus.claimed
+            sandbox_id = str(warm.id)
+
+            # Send start event to configure the sandbox with project files
+            await forge_inngest.send(
+                inngest.Event(
+                    name="forge/sandbox.lifecycle",
+                    data={
+                        "action": "start",
+                        "sandbox_id": sandbox_id,
+                        "project_id": str(project_id),
+                        "northflank_service_id": warm.northflank_service_id,
+                    },
+                )
+            )
+            return sandbox_id
+
+    # 3. Provision fresh
+    return await provision_sandbox(project_id)
 
 
 async def provision_sandbox(project_id: uuid.UUID | None = None) -> str:
@@ -34,11 +87,13 @@ async def provision_sandbox(project_id: uuid.UUID | None = None) -> str:
     return sandbox_id
 
 
-async def start_sandbox(sandbox_id: uuid.UUID) -> None:
-    """Fire event to start/claim a sandbox."""
+async def start_sandbox(sandbox_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    """Fire event to start/claim a sandbox. Verifies ownership."""
     async with get_read_session() as db:
         result = await db.execute(
-            select(Sandbox).where(Sandbox.id == sandbox_id)
+            select(Sandbox)
+            .join(Project, Sandbox.project_id == Project.id)
+            .where(Sandbox.id == sandbox_id, Project.user_id == user_id)
         )
         sandbox = result.scalar_one_or_none()
 
@@ -58,11 +113,13 @@ async def start_sandbox(sandbox_id: uuid.UUID) -> None:
     )
 
 
-async def stop_sandbox(sandbox_id: uuid.UUID) -> None:
-    """Fire event to stop a sandbox."""
+async def stop_sandbox(sandbox_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    """Fire event to stop a sandbox. Verifies ownership."""
     async with get_read_session() as db:
         result = await db.execute(
-            select(Sandbox).where(Sandbox.id == sandbox_id)
+            select(Sandbox)
+            .join(Project, Sandbox.project_id == Project.id)
+            .where(Sandbox.id == sandbox_id, Project.user_id == user_id)
         )
         sandbox = result.scalar_one_or_none()
 
@@ -82,11 +139,13 @@ async def stop_sandbox(sandbox_id: uuid.UUID) -> None:
     )
 
 
-async def destroy_sandbox(sandbox_id: uuid.UUID) -> None:
-    """Fire event to destroy a sandbox."""
+async def destroy_sandbox(sandbox_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    """Fire event to destroy a sandbox. Verifies ownership."""
     async with get_read_session() as db:
         result = await db.execute(
-            select(Sandbox).where(Sandbox.id == sandbox_id)
+            select(Sandbox)
+            .join(Project, Sandbox.project_id == Project.id)
+            .where(Sandbox.id == sandbox_id, Project.user_id == user_id)
         )
         sandbox = result.scalar_one_or_none()
 

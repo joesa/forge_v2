@@ -8,19 +8,20 @@ class CTOAgent(BaseCSuiteAgent):
     name = "cto"
     schema = CTOOutput
 
-    async def _run(self, idea_spec: dict) -> dict:
-        return {
-            "tech_stack_recommendation": {
-                "frontend": "React + TypeScript + Vite",
-                "backend": "FastAPI + Python",
-                "database": "PostgreSQL",
-                "hosting": "Northflank containers",
-            },
-            "api_design": "RESTful with WebSocket for real-time updates",
-            "scalability_approach": "Horizontal scaling with connection pooling and Redis caching",
-            "technical_risks": [
-                "Third-party API rate limits",
-                "Database connection pool exhaustion under load",
-                "WebSocket state management at scale",
-            ],
-        }
+    def _system_prompt(self) -> str:
+        return (
+            "You are a CTO agent. Given an app idea, recommend a concrete tech stack "
+            "(frontend, backend, database, hosting), API design approach, scalability strategy, "
+            "and identify the top technical risks. Tailor every recommendation to the specific app "
+            "described — do NOT give generic boilerplate."
+        )
+
+    def _user_prompt(self, idea_spec: dict) -> str:
+        desc = idea_spec.get("description", "")
+        framework = idea_spec.get("framework", "")
+        services = idea_spec.get("services", [])
+        return (
+            f"App idea: {desc}\n"
+            f"Preferred framework: {framework}\n"
+            f"Cloud services requested: {', '.join(services) if services else 'none specified'}"
+        )

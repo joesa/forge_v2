@@ -39,7 +39,7 @@ class ReviewAgent(BaseBuildAgent):
         Returns dict with keys: passed, coherence, barrels, seams, gates.
         """
         generated_files = state.get("generated_files", {})
-        build_id = uuid.UUID(state.get("pipeline_id", str(uuid.uuid4())))
+        build_id = uuid.UUID(state.get("build_id") or state.get("pipeline_id", str(uuid.uuid4())))
 
         report: dict = {"passed": True, "issues": []}
 

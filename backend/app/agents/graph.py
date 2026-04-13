@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 import uuid
+
+from sqlalchemy import update as _sql_update
 
 from langgraph.graph import END, StateGraph
 
@@ -48,7 +51,11 @@ from app.agents.build import BUILD_AGENTS, REVIEW_AGENT
 from app.agents.build.hotfix_agent import apply_hotfix
 from app.services.snapshot_service import capture_snapshot
 from app.services.storage_service import upload_file
+from app.core.database import get_write_session
+from app.models.build import Build, BuildStatus
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _CSUITE_AGENTS: list[BaseCSuiteAgent] = [
     CEOAgent(), CTOAgent(), CDOAgent(), CMOAgent(),
@@ -59,12 +66,32 @@ _CSUITE_AGENTS: list[BaseCSuiteAgent] = [
 async def _publish(state: PipelineState, stage: int, status: str, message: str) -> None:
     if redis_client is None:
         return
+    # Map "completed" → "done" for frontend StageStatus compatibility
+    ws_status = "done" if status == "completed" else status
     await redis_client.publish(
         f"pipeline:{state['pipeline_id']}",
         json.dumps({
+            "type": "stage_update",
             "stage": stage,
-            "status": status,
+            "status": ws_status,
             "message": message,
+            "timestamp_ms": int(time.time() * 1000),
+        }),
+    )
+
+
+async def _publish_agent(state: PipelineState, agent: str, status: str, output: str = "") -> None:
+    """Publish a per-agent update (used for C-Suite cards)."""
+    if redis_client is None:
+        return
+    ws_status = "done" if status == "completed" else status
+    await redis_client.publish(
+        f"pipeline:{state['pipeline_id']}",
+        json.dumps({
+            "type": "agent_update",
+            "agent": agent,
+            "status": ws_status,
+            "output": output,
             "timestamp_ms": int(time.time() * 1000),
         }),
     )
@@ -105,9 +132,21 @@ async def csuite_analysis(state: PipelineState) -> PipelineState:
 
     idea_spec = state.get("idea_spec", {})
 
-    # 8 agents in parallel
+    # 8 agents in parallel — publish per-agent updates as each completes
     async def _run_agent(agent: BaseCSuiteAgent) -> tuple[str, dict]:
+        await _publish_agent(state, agent.name, "running")
         output = await agent.execute(idea_spec)
+        # Extract a short summary for the card display
+        summary = ""
+        if isinstance(output, dict):
+            summary = output.get("summary", output.get("headline", ""))
+            if not summary:
+                # Take first non-empty string value as summary
+                for v in output.values():
+                    if isinstance(v, str) and len(v) > 5:
+                        summary = v[:120]
+                        break
+        await _publish_agent(state, agent.name, "completed", summary)
         return agent.name, output
 
     results = await asyncio.gather(*[_run_agent(a) for a in _CSUITE_AGENTS])
@@ -228,8 +267,21 @@ async def build(state: PipelineState) -> PipelineState:
 
     pipeline_id = state.get("pipeline_id", str(uuid.uuid4()))
     project_id = state.get("project_id", str(uuid.uuid4()))
-    build_uuid = uuid.UUID(pipeline_id) if pipeline_id else uuid.uuid4()
+    user_id = state.get("user_id")
+    pipeline_uuid = uuid.UUID(pipeline_id) if pipeline_id else uuid.uuid4()
     project_uuid = uuid.UUID(project_id) if project_id else uuid.uuid4()
+
+    # Create a Build record so snapshots have a valid FK
+    build_uuid = uuid.uuid4()
+    state["build_id"] = str(build_uuid)
+    async with get_write_session() as db:
+        build_row = Build(
+            id=build_uuid,
+            project_id=project_uuid,
+            user_id=uuid.UUID(user_id) if user_id else project_uuid,
+            status=BuildStatus.building,
+        )
+        db.add(build_row)
 
     # ── Layer 7: WireMock external service simulation ────────────
     wiremock = WireMockManager()
@@ -269,6 +321,14 @@ async def build(state: PipelineState) -> PipelineState:
                         f"Agent {agent.agent_number} ({agent.name}) G7 failed: {g7['reason']}"
                     )
                     await _publish(state, 6, "failed", f"Agent {agent.agent_number} build failed")
+                    # Mark build as failed
+                    async with get_write_session() as db:
+                        await db.execute(
+                            _sql_update(Build).where(Build.id == build_uuid).values(
+                                status=BuildStatus.failed,
+                                gate_results=state.get("gate_results"),
+                            )
+                        )
                     return state
 
         # ── Agent 10: ReviewAgent — validates only ───────────────
@@ -301,12 +361,52 @@ async def build(state: PipelineState) -> PipelineState:
     # ── Store generated files to Supabase Storage ────────────────
     storage_key = f"{project_id}/{build_uuid}/build.json"
     payload = json.dumps(state["generated_files"], sort_keys=True).encode()
-    await upload_file(
-        bucket=settings.SUPABASE_BUCKET_PROJECTS,
-        path=storage_key,
-        content=payload,
-        content_type="application/json",
-    )
+    logger.info("Uploading build.json (%d bytes, %d files) to %s",
+                len(payload), len(state["generated_files"]), storage_key)
+    try:
+        await upload_file(
+            bucket=settings.SUPABASE_BUCKET_PROJECTS,
+            path=storage_key,
+            content=payload,
+            content_type="application/json",
+        )
+    except Exception as e:
+        logger.exception("Failed to upload build.json: %s", e)
+        raise
+
+    # Upload each generated file individually so the editor can access them
+    await _publish(state, 6, "running", "Uploading files to storage")
+    for filepath, content in state["generated_files"].items():
+        ct = "application/json" if filepath.endswith(".json") else "text/plain"
+        try:
+            await upload_file(
+                bucket=settings.SUPABASE_BUCKET_PROJECTS,
+                path=f"{project_id}/{filepath}",
+                content=content.encode() if isinstance(content, str) else content,
+                content_type=ct,
+            )
+        except Exception as e:
+            logger.error("Failed to upload file %s: %s", filepath, e)
+            state.setdefault("errors", []).append(f"Upload failed for {filepath}: {e}")
+
+    # Mark build as success
+    async with get_write_session() as db:
+        await db.execute(
+            _sql_update(Build).where(Build.id == build_uuid).values(
+                status=BuildStatus.success,
+                generated_files_key=storage_key,
+                gate_results=state.get("gate_results"),
+            )
+        )
+
+    # Provision a sandbox so the preview is ready when the user opens the editor
+    try:
+        from app.services.sandbox_service import claim_or_provision_sandbox
+        sandbox_id = await claim_or_provision_sandbox(project_uuid)
+        state["sandbox_id"] = sandbox_id
+        logger.info("Sandbox provisioned: %s for project %s", sandbox_id, project_id)
+    except Exception as e:
+        logger.error("Sandbox provisioning failed (non-fatal): %s", e)
 
     await _publish(state, 6, "completed", "Build complete")
     return state

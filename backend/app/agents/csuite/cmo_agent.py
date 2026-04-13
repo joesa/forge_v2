@@ -8,15 +8,13 @@ class CMOAgent(BaseCSuiteAgent):
     name = "cmo"
     schema = CMOOutput
 
-    async def _run(self, idea_spec: dict) -> dict:
-        return {
-            "gtm_strategy": "Developer-led growth with content marketing and community building",
-            "target_customer_profile": "Solo developers and small teams building MVPs who need speed over customization",
-            "growth_channels": [
-                "Developer communities (Reddit, HN, Discord)",
-                "Technical blog content and tutorials",
-                "Open-source integrations",
-                "Product Hunt launch",
-            ],
-            "positioning_statement": "FORGE: From idea to production app in minutes, not months",
-        }
+    def _system_prompt(self) -> str:
+        return (
+            "You are a CMO agent. Given an app idea, define a go-to-market strategy, "
+            "target customer profile, prioritized growth channels, and a positioning statement. "
+            "Be specific to the product described."
+        )
+
+    def _user_prompt(self, idea_spec: dict) -> str:
+        desc = idea_spec.get("description", "")
+        return f"App idea: {desc}"

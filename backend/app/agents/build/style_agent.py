@@ -1,22 +1,10 @@
-"""Agent 8: Style — UNIQUE palette per app domain, Layer 10 CSS validation."""
+"""Agent 8: Style — generate unique palette and theme for the app."""
 from __future__ import annotations
 
-import hashlib
+import json
 
-from app.agents.build.base import BaseBuildAgent, TEMPERATURE, SEED
+from app.agents.build.base import BaseBuildAgent
 from app.agents.state import PipelineState
-
-
-# Palette templates keyed by domain category
-_PALETTES = {
-    "saas": {"primary": "#6366f1", "secondary": "#8b5cf6", "accent": "#f59e0b", "bg": "#0f172a", "surface": "#1e293b"},
-    "ecommerce": {"primary": "#059669", "secondary": "#0d9488", "accent": "#f97316", "bg": "#fafafa", "surface": "#ffffff"},
-    "social": {"primary": "#3b82f6", "secondary": "#6366f1", "accent": "#ec4899", "bg": "#0c0a09", "surface": "#1c1917"},
-    "education": {"primary": "#2563eb", "secondary": "#7c3aed", "accent": "#f59e0b", "bg": "#f8fafc", "surface": "#ffffff"},
-    "health": {"primary": "#0891b2", "secondary": "#06b6d4", "accent": "#10b981", "bg": "#f0fdfa", "surface": "#ffffff"},
-    "finance": {"primary": "#1d4ed8", "secondary": "#3b82f6", "accent": "#22c55e", "bg": "#020617", "surface": "#0f172a"},
-    "default": {"primary": "#8b5cf6", "secondary": "#a78bfa", "accent": "#f59e0b", "bg": "#09090b", "surface": "#18181b"},
-}
 
 
 class StyleAgent(BaseBuildAgent):
@@ -26,72 +14,37 @@ class StyleAgent(BaseBuildAgent):
     async def _run(self, state: PipelineState) -> dict[str, str]:
         plan = state.get("comprehensive_plan", {})
         idea_spec = state.get("idea_spec", {})
+        existing_files = state.get("generated_files", {})
 
-        # Determine domain from plan or idea
-        domain = plan.get("domain", idea_spec.get("category", "default")).lower()
+        domain = plan.get("domain", idea_spec.get("category", "saas")).lower()
         app_name = idea_spec.get("name", plan.get("app_name", "app"))
 
-        # Pick palette — derive unique variation from app name
-        base_palette = _PALETTES.get(domain, _PALETTES["default"])
-        palette = _derive_palette(base_palette, app_name)
+        # Provide existing component/page code as context for styling
+        context_files = {
+            k: v for k, v in existing_files.items()
+            if k.endswith(".tsx") or k.endswith(".css")
+        }
 
-        files: dict[str, str] = {}
+        system_prompt = (
+            "You are a senior UI/UX designer and frontend developer. Generate the styling and theme "
+            "for a React + TypeScript app.\n\n"
+            "Return a JSON object where each key is a file path and value is the complete file content.\n\n"
+            "Requirements:\n"
+            "- tailwind.config.js: Complete Tailwind config with custom color palette, fonts, and spacing\n"
+            "- src/index.css: CSS with Tailwind directives, CSS custom properties, and base styles\n"
+            "- The color palette MUST be unique to this app — derive colors from the domain and app name\n"
+            "- Include dark mode support\n"
+            "- Define CSS custom properties for primary, secondary, accent, background, surface colors\n"
+            "- body should use the background color\n"
+            "- Use a professional color scheme appropriate for the app's domain\n"
+            "- DO NOT use generic/default Tailwind colors — create a distinctive brand palette"
+        )
 
-        # Generate tailwind theme extension
-        files["tailwind.config.js"] = f"""/** @type {{import('tailwindcss').Config}} */
-export default {{
-  content: ['./index.html', './src/**/*.{{js,ts,jsx,tsx}}'],
-  theme: {{
-    extend: {{
-      colors: {{
-        primary: '{palette["primary"]}',
-        secondary: '{palette["secondary"]}',
-        accent: '{palette["accent"]}',
-        background: '{palette["bg"]}',
-        surface: '{palette["surface"]}',
-      }},
-    }},
-  }},
-  plugins: [],
-}};"""
+        user_prompt = (
+            f"App: {app_name}\n"
+            f"Domain: {domain}\n"
+            f"Description: {idea_spec.get('description', '')}\n"
+            f"Existing components: {json.dumps(list(context_files.keys()))}"
+        )
 
-        # Generate CSS variables
-        files["src/index.css"] = f"""@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {{
-  :root {{
-    --color-primary: {palette["primary"]};
-    --color-secondary: {palette["secondary"]};
-    --color-accent: {palette["accent"]};
-    --color-bg: {palette["bg"]};
-    --color-surface: {palette["surface"]};
-  }}
-
-  body {{
-    background-color: var(--color-bg);
-    color: {_text_color(palette["bg"])};
-  }}
-}}
-"""
-
-        return files
-
-
-def _derive_palette(base: dict[str, str], seed: str) -> dict[str, str]:
-    """Shift hue slightly based on app name hash for uniqueness."""
-    h = int(hashlib.sha256(seed.encode()).hexdigest()[:4], 16) % 30
-    # Keep the base palette but note the shift for LLM-generated apps
-    # In production this would HSL-rotate; for now return base
-    return dict(base)
-
-
-def _text_color(bg: str) -> str:
-    """Return white or dark text based on background luminance."""
-    bg = bg.lstrip("#")
-    if len(bg) != 6:
-        return "#ffffff"
-    r, g, b = int(bg[0:2], 16), int(bg[2:4], 16), int(bg[4:6], 16)
-    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-    return "#111827" if luminance > 0.5 else "#f9fafb"
+        return await self._call_llm(system_prompt, user_prompt)

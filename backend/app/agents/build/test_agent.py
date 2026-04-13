@@ -1,7 +1,9 @@
-"""Agent 9: Test — unit + integration tests, happy path + edge cases."""
+"""Agent 9: Test — generate unit + integration tests."""
 from __future__ import annotations
 
-from app.agents.build.base import BaseBuildAgent, TEMPERATURE, SEED
+import json
+
+from app.agents.build.base import BaseBuildAgent
 from app.agents.state import PipelineState
 
 
@@ -11,94 +13,39 @@ class TestAgent(BaseBuildAgent):
 
     async def _run(self, state: PipelineState) -> dict[str, str]:
         plan = state.get("comprehensive_plan", {})
-        generated_files = state.get("generated_files", {})
+        idea_spec = state.get("idea_spec", {})
+        existing_files = state.get("generated_files", {})
 
-        files: dict[str, str] = {}
+        # Provide all component and page source code as context
+        testable_files = {
+            k: v for k, v in existing_files.items()
+            if (k.startswith("src/components/") or k.startswith("src/pages/") or k.startswith("src/lib/") or k.startswith("src/hooks/"))
+            and k.endswith((".ts", ".tsx"))
+            and not k.endswith(".test.tsx")
+            and not k.endswith(".test.ts")
+        }
 
-        # Vitest config
-        files["vitest.config.ts"] = """import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
+        system_prompt = (
+            "You are a senior QA/test engineer. Generate comprehensive tests for a React + TypeScript app "
+            "using Vitest and React Testing Library.\n\n"
+            "Return a JSON object where each key is a file path and value is the complete file content.\n\n"
+            "Requirements:\n"
+            "- vitest.config.ts: Vitest config with jsdom environment and react plugin\n"
+            "- src/test/setup.ts: Test setup importing @testing-library/jest-dom\n"
+            "- Generate test files in src/test/ mirroring the source structure\n"
+            "- Test each component renders without crashing\n"
+            "- Test each page renders (wrap in MemoryRouter)\n"
+            "- Test hook behavior where applicable\n"
+            "- Include at least one integration test for App\n"
+            "- Use proper TypeScript types in tests\n"
+            "- Test meaningful behavior, not just smoke tests"
+        )
 
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    setupFiles: ['./src/test/setup.ts'],
-  },
-});"""
+        user_prompt = (
+            f"App: {idea_spec.get('name', 'App')}\n"
+            f"Description: {idea_spec.get('description', '')}\n"
+            f"Source files to test:\n{json.dumps(testable_files, default=str)}\n"
+            f"All files: {json.dumps(list(existing_files.keys()))}"
+        )
 
-        files["src/test/setup.ts"] = """import '@testing-library/jest-dom';
-"""
-
-        # Generate tests for discovered components
-        component_files = [
-            f for f in generated_files
-            if f.startswith("src/components/") and f.endswith(".tsx")
-            and not f.endswith("index.ts")
-        ]
-
-        for comp_file in component_files:
-            # Extract component name from file
-            basename = comp_file.rsplit("/", 1)[-1].replace(".tsx", "")
-            # PascalCase the component name
-            component_name = basename[0].upper() + basename[1:]
-
-            test_file = comp_file.replace("src/components/", "src/test/components/").replace(".tsx", ".test.tsx")
-            rel_import = "../../components/" + basename
-
-            files[test_file] = f"""import {{ render, screen }} from '@testing-library/react';
-import {{ {component_name} }} from '{rel_import}';
-
-describe('{component_name}', () => {{
-  it('renders without crashing', () => {{
-    render(<{component_name} />);
-  }});
-
-  it('displays component content', () => {{
-    render(<{component_name} />);
-    expect(document.querySelector('.{basename}')).toBeInTheDocument();
-  }});
-}});
-"""
-
-        # Generate tests for discovered pages
-        page_files = [
-            f for f in generated_files
-            if f.startswith("src/pages/") and f.endswith(".tsx")
-        ]
-
-        for page_file in page_files:
-            basename = page_file.rsplit("/", 1)[-1].replace(".tsx", "")
-            component_name = basename[0].upper() + basename[1:]
-
-            test_file = page_file.replace("src/pages/", "src/test/pages/").replace(".tsx", ".test.tsx")
-            rel_import = "../../pages/" + basename
-
-            files[test_file] = f"""import {{ render }} from '@testing-library/react';
-import {{ MemoryRouter }} from 'react-router-dom';
-import {{ {component_name} }} from '{rel_import}';
-
-describe('{component_name}', () => {{
-  it('renders without crashing', () => {{
-    render(
-      <MemoryRouter>
-        <{component_name} />
-      </MemoryRouter>
-    );
-  }});
-}});
-"""
-
-        # App-level integration test
-        files["src/test/App.test.tsx"] = """import { render } from '@testing-library/react';
-import { App } from '../App';
-
-describe('App', () => {
-  it('renders without crashing', () => {
-    render(<App />);
-  });
-});
-"""
-
-        return files
+        return await self._call_llm(system_prompt, user_prompt)
