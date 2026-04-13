@@ -43,9 +43,9 @@ async function pullFiles() {
   console.log(`[forge-agent] Pulling files for project ${PROJECT_ID}...`);
 
   try {
-    // Fetch file list (API returns a nested tree)
+    // Fetch file list (flat=true for flat array, falls back to tree flattening)
     const listRes = await fetch(
-      `${FORGE_API_URL}/api/v1/projects/${PROJECT_ID}/files`,
+      `${FORGE_API_URL}/api/v1/projects/${PROJECT_ID}/files?flat=true`,
       { headers: { Authorization: `Bearer ${FORGE_SERVICE_TOKEN}` } },
     );
 

@@ -148,7 +148,12 @@ def _build_tree(paths: list[str]) -> list[dict]:
 
 
 @router.get("/{project_id}/files")
-async def get_files(project_id: UUID, request: Request, path: str | None = Query(default=None)):
+async def get_files(
+    project_id: UUID,
+    request: Request,
+    path: str | None = Query(default=None),
+    flat: bool = Query(default=False),
+):
     if not _is_service(request):
         uid = _user_id(request)
         if path is None:
@@ -159,6 +164,8 @@ async def get_files(project_id: UUID, request: Request, path: str | None = Query
         import re
         _uuid_dir = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/", re.I)
         raw = [p for p in raw if not _uuid_dir.match(p)]
+        if flat:
+            return [{"name": p.rsplit("/", 1)[-1], "type": "file", "path": p} for p in raw]
         return _build_tree(raw)
     # Single file download (raw bytes)
     if _is_service(request):
