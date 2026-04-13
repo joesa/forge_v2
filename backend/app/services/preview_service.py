@@ -49,7 +49,11 @@ async def get_preview_url(
 ) -> dict:
     """Get the preview URL for a sandbox after verifying ownership."""
     sandbox = await _get_sandbox_with_ownership(sandbox_id, user_id)
-    preview_url = f"https://{sandbox_id}.{settings.PREVIEW_DOMAIN}"
+    # Use stored direct URL if available (Northflank), fall back to preview domain
+    if sandbox.sandbox_url:
+        preview_url = sandbox.sandbox_url
+    else:
+        preview_url = f"https://{sandbox_id}.{settings.PREVIEW_DOMAIN}"
     return {
         "sandbox_id": str(sandbox.id),
         "preview_url": preview_url,
@@ -67,7 +71,17 @@ async def check_preview_health(sandbox_id: uuid.UUID) -> dict:
         if cached is not None:
             return json.loads(cached)
 
-    preview_url = f"https://{sandbox_id}.{settings.PREVIEW_DOMAIN}"
+    # Resolve direct sandbox URL from DB if available
+    async with get_read_session() as session:
+        result = await session.execute(
+            select(Sandbox).where(Sandbox.id == sandbox_id)
+        )
+        sandbox = result.scalar_one_or_none()
+    if sandbox and sandbox.sandbox_url:
+        preview_url = sandbox.sandbox_url
+    else:
+        preview_url = f"https://{sandbox_id}.{settings.PREVIEW_DOMAIN}"
+
     health: dict = {
         "sandbox_id": str(sandbox_id),
         "healthy": False,

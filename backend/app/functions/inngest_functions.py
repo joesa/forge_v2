@@ -433,6 +433,8 @@ async def _sandbox_lifecycle_handler(
                 sandbox = row.scalar_one_or_none()
                 if sandbox:
                     sandbox.northflank_service_id = nf_service_id
+                    if sandbox_url:
+                        sandbox.sandbox_url = sandbox_url
 
         await step.run("save-service-id", _save_nf_service_id)
 

@@ -85,15 +85,17 @@ async def revoke_share(sandbox_id: uuid.UUID, token: str, request: Request):
 async def console_ws(sandbox_id: uuid.UUID, websocket: WebSocket):
     """WebSocket proxy for sandbox console output.
 
-    The client sends auth token in the first message.
+    Auth token can be passed as a query parameter (?token=...) or as the first message.
     """
     await websocket.accept()
     try:
-        # First message must be a valid JWT — HTTP middleware doesn't cover WS
-        auth_msg = await websocket.receive_text()
+        # Try query param first, then first message
+        token = websocket.query_params.get("token")
+        if not token:
+            token = await websocket.receive_text()
         try:
             payload = jwt.decode(
-                auth_msg,
+                token,
                 settings.SUPABASE_JWT_SECRET,
                 algorithms=["HS256"],
                 audience="authenticated",

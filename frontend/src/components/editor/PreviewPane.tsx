@@ -7,7 +7,6 @@ import SnapshotTimeline from './SnapshotTimeline'
 import PreviewDevConsole from './PreviewDevConsole'
 
 const MONO = "'JetBrains Mono', monospace"
-const PREVIEW_DOMAIN = '.preview.forge.dev'
 
 export default function PreviewPane() {
   const { sandboxId, previewDevice, previewRoute, selectedSnapshot } = useEditorStore()
@@ -16,11 +15,19 @@ export default function PreviewPane() {
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
 
-  // Set auth cookie for *.preview.forge.dev before iframe loads
+  // Set auth cookie scoped to the preview URL domain
   useEffect(() => {
     const token = localStorage.getItem('access_token')
-    if (token) {
-      document.cookie = `forge_access_token=${token}; domain=${PREVIEW_DOMAIN}; path=/; SameSite=None; Secure`
+    if (!token || !previewUrl) return
+    try {
+      const host = new URL(previewUrl).hostname
+      // Use parent domain (e.g. .code.run or .preview.forge.dev)
+      const parts = host.split('.')
+      const cookieDomain = parts.length > 2 ? `.${parts.slice(-2).join('.')}` : host
+      document.cookie = `forge_access_token=${token}; domain=${cookieDomain}; path=/; SameSite=None; Secure`
+    } catch {
+      // Fallback: set cookie without domain restriction
+      document.cookie = `forge_access_token=${token}; path=/; SameSite=None; Secure`
     }
   }, [previewUrl])
 

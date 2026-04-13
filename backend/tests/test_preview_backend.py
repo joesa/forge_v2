@@ -33,6 +33,7 @@ class TestPreviewService:
         mock_sandbox.id = sandbox_id
         mock_sandbox.project_id = project_id
         mock_sandbox.status = MagicMock(value="claimed")
+        mock_sandbox.sandbox_url = None
 
         mock_session = AsyncMock()
         mock_result = MagicMock()
@@ -64,10 +65,20 @@ class TestPreviewService:
 
     @pytest.mark.asyncio
     @patch("app.services.preview_service.redis_client", None)
-    async def test_check_preview_health_no_cache(self):
+    @patch("app.services.preview_service.get_read_session")
+    async def test_check_preview_health_no_cache(self, mock_read):
         from app.services.preview_service import check_preview_health
 
         sandbox_id = uuid.uuid4()
+
+        # Mock the DB lookup for direct sandbox URL
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_read.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_read.return_value.__aexit__ = AsyncMock(return_value=False)
+
         # Without Redis, it will attempt HTTP and likely fail — that's fine
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
@@ -103,11 +114,20 @@ class TestPreviewService:
 
     @pytest.mark.asyncio
     @patch("app.services.preview_service.redis_client", None)
-    async def test_check_preview_health_unreachable(self):
+    @patch("app.services.preview_service.get_read_session")
+    async def test_check_preview_health_unreachable(self, mock_read):
         from app.services.preview_service import check_preview_health
         import httpx
 
         sandbox_id = uuid.uuid4()
+
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_read.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_read.return_value.__aexit__ = AsyncMock(return_value=False)
+
         with patch("httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(side_effect=httpx.ConnectError("refused"))

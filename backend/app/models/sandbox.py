@@ -31,3 +31,4 @@ class Sandbox(TimestampMixin, Base):
         Enum(SandboxStatus), default=SandboxStatus.warm, server_default="warm"
     )
     northflank_service_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    sandbox_url: Mapped[str | None] = mapped_column(String, nullable=True)
