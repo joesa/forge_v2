@@ -22,6 +22,7 @@ from app.agents.csuite.cfo_agent import CFOAgent
 from app.agents.csuite.schemas import CSUITE_SCHEMAS
 from app.agents.state import PipelineState
 from app.agents.synthesis.g3_resolver import resolve_conflicts
+from app.agents.synthesis.plan_flattener import flatten_plan
 from app.agents.synthesis.synthesizer import synthesize
 from app.agents.validators import (
     validate_g1,
@@ -200,6 +201,11 @@ async def synthesis(state: PipelineState) -> PipelineState:
         state.setdefault("errors", []).append(g4["reason"])
         await _publish(state, 3, "failed", g4["reason"])
         return state
+
+    # Flatten plan into build-ready keys (pages, entities, features, components)
+    await _publish(state, 3, "running", "Extracting build specification")
+    idea_spec = state.get("idea_spec", {})
+    state["comprehensive_plan"] = await flatten_plan(plan, idea_spec)
 
     await _publish(state, 3, "completed", "Synthesis done")
     return state

@@ -25,7 +25,7 @@ def generate_package_json(
     all_dev = dict(sorted((dev_dependencies or {}).items()))
 
     default_scripts = {
-        "dev": "vite",
+        "dev": "vite --host 0.0.0.0 --port 3000",
         "build": "tsc -b && vite build",
         "preview": "vite preview",
         "lint": "eslint .",

@@ -18,19 +18,22 @@ class ScaffoldAgent(BaseBuildAgent):
         plan = state.get("comprehensive_plan", {})
         idea_spec = state.get("idea_spec", {})
         framework = idea_spec.get("framework", "vite_react")
-        app_name = idea_spec.get("name", plan.get("app_name", "forge-app"))
+        app_name = plan.get("app_name", idea_spec.get("name", "forge-app"))
 
-        # Layer 1: Resolve dependencies
+        # Layer 1: Resolve dependencies from plan
         raw_deps = plan.get("dependencies", {
             "react": "^18.3.1",
             "react-dom": "^18.3.1",
             "react-router-dom": "^6.23.0",
+            "@supabase/supabase-js": "^2.45.0",
+            "zod": "^3.23.0",
         })
         resolved_deps = resolve_dependencies(raw_deps)
 
         dev_deps = plan.get("dev_dependencies", {
             "typescript": "^5.4.0",
             "vite": "^5.4.0",
+            "@vitejs/plugin-react": "^4.3.0",
             "@types/react": "^18.3.0",
             "@types/react-dom": "^18.3.0",
             "tailwindcss": "^3.4.0",
@@ -43,20 +46,26 @@ class ScaffoldAgent(BaseBuildAgent):
         env_template = get_env_template(framework)
 
         system_prompt = (
-            "You are a senior full-stack developer setting up a new Vite + React + TypeScript project. "
-            "Generate the project scaffold files. Return a JSON object where each key is a file path "
+            "You are a senior full-stack developer setting up a new Vite + React + TypeScript project.\n"
+            "Generate the project scaffold files. Return a JSON object where each key is a file path\n"
             "and the value is the complete file content as a string.\n\n"
             "Required files:\n"
             "- tsconfig.json (strict mode, ES2020 target, bundler resolution)\n"
             "- tsconfig.node.json\n"
-            "- vite.config.ts (port 3000, path aliases with @/ -> src/)\n"
-            "- index.html (reference /src/main.tsx)\n"
-            "- src/main.tsx (React 18 createRoot)\n"
+            "- vite.config.ts — MUST include:\n"
+            "  - @vitejs/plugin-react plugin\n"
+            "  - server.port = 3000, server.host = '0.0.0.0'\n"
+            "  - server.allowedHosts = true\n"
+            "  - resolve.alias: '@' → './src'\n"
+            "- index.html (reference /src/main.tsx, include <div id='root'>)\n"
+            "- src/main.tsx (React 18 createRoot, import App and index.css)\n"
             "- src/App.tsx (BrowserRouter wrapping AppRoutes from ./routes)\n"
-            "- src/index.css (Tailwind directives)\n"
-            "- tailwind.config.js (content paths for index.html + src/**)\n"
-            "- postcss.config.js\n"
+            "- src/index.css (Tailwind directives: @tailwind base/components/utilities)\n"
+            "- tailwind.config.js — MUST use ESM syntax (export default), include content paths\n"
+            "- postcss.config.js — MUST use ESM syntax (export default)\n"
             "- .gitignore\n\n"
+            "CRITICAL: The package.json uses \"type\": \"module\", so ALL .js config files MUST use\n"
+            "ESM syntax (export default {...}) — NOT CommonJS (module.exports = {...}).\n\n"
             "DO NOT include package.json or .env.example — those are provided separately.\n"
             "All code must be production-quality TypeScript with strict mode."
         )
@@ -65,7 +74,7 @@ class ScaffoldAgent(BaseBuildAgent):
             f"App name: {app_name}\n"
             f"Framework: {framework}\n"
             f"Description: {idea_spec.get('description', 'A web application')}\n"
-            f"Plan summary: {json.dumps(plan.get('summary', plan.get('description', '')), default=str)}\n"
+            f"Domain: {plan.get('domain', 'saas')}\n"
             f"Dependencies: {json.dumps(list(resolved_deps.keys()), default=str)}"
         )
 

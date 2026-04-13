@@ -20,30 +20,46 @@ class ComponentAgent(BaseBuildAgent):
         zod_schemas = spec_outputs.get("zod_schemas", "")
         ts_interfaces = spec_outputs.get("ts_interfaces", "")
         components = plan.get("components", [
-            {"name": "Header", "props": []},
-            {"name": "Footer", "props": []},
-            {"name": "Layout", "props": ["children"]},
+            {"name": "Header", "props": [], "description": "Navigation header with links"},
+            {"name": "Footer", "props": [], "description": "Page footer"},
+            {"name": "Layout", "props": [{"name": "children", "type": "ReactNode", "required": True}],
+             "description": "Page layout wrapper with Header, main content, Footer"},
         ])
+        entities = plan.get("entities", [])
+        features = plan.get("features", [])
 
         system_prompt = (
-            "You are a senior React + TypeScript developer. Generate reusable UI components.\n\n"
+            "You are a senior React + TypeScript developer. Generate reusable UI components\n"
+            "that will be used by the page implementations.\n\n"
             "Return a JSON object where each key is a file path and value is the complete file content.\n\n"
             "Requirements:\n"
-            "- Generate each component in src/components/<name>.tsx\n"
-            "- Create src/components/index.ts barrel export file\n"
+            "- Generate each component in src/components/<Name>.tsx\n"
+            "- Create src/components/index.ts barrel export (re-export defaults as named exports)\n"
             "- If Zod schemas are provided, create src/lib/schemas.ts\n"
             "- If TypeScript interfaces are provided, create src/types/models.ts\n"
-            "- Components must be functional React components with proper TypeScript props interfaces\n"
-            "- Use Tailwind CSS for styling\n"
-            "- Components should be production-quality with real, useful UI — not just placeholders\n"
-            "- Each component should render meaningful content appropriate to its purpose\n"
-            "- Include a Layout component that wraps children with a header and navigation"
+            "- Components MUST be functional React components with TypeScript props interfaces\n"
+            "- Use Tailwind CSS for styling — professional, polished appearance\n"
+            "- Each component must be REAL and FUNCTIONAL:\n"
+            "  - Form components must have controlled inputs with onChange/onSubmit handlers\n"
+            "  - List components must accept data arrays and render items with actions\n"
+            "  - Modal/dialog components must handle open/close state via props\n"
+            "  - Card components must display entity data with edit/delete action buttons\n"
+            "- Layout component: wraps children with Header (nav links matching routes) + Footer\n"
+            "- Header MUST include navigation links matching the app's pages\n"
+            "- All components use export default\n"
+            "- Use TypeScript strict mode, no 'any' types\n\n"
+            "CRITICAL: Generate components that the Page agent will actually USE for CRUD operations.\n"
+            "For example, if the app manages tasks, generate a TaskForm, TaskCard, TaskList component."
         )
 
         user_prompt = (
             f"App: {idea_spec.get('name', 'App')}\n"
-            f"Description: {idea_spec.get('description', '')}\n"
-            f"Components from plan: {json.dumps(components, default=str)}\n"
+            f"Description: {idea_spec.get('description', '')}\n\n"
+            f"Components from plan:\n{json.dumps(components, indent=2, default=str)}\n\n"
+            f"Entities (data models the components will display/edit):\n"
+            f"{json.dumps(entities, indent=2, default=str)}\n\n"
+            f"Features (what the components need to support):\n"
+            f"{json.dumps(features, indent=2, default=str)}\n\n"
             f"Zod schemas:\n{zod_schemas or '(none)'}\n\n"
             f"TypeScript interfaces:\n{ts_interfaces or '(none)'}\n\n"
             f"Existing files: {json.dumps(list(existing_files.keys()))}"

@@ -232,6 +232,7 @@ class TestScaffoldAgent:
         agent._call_llm = _make_llm_mock(custom_response)
         state = _base_state()
         state["idea_spec"]["name"] = "my-cool-app"
+        state["comprehensive_plan"]["app_name"] = "my-cool-app"
         files = await agent.execute(state)
 
         pkg = json.loads(files["package.json"])

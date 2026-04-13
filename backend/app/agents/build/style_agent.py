@@ -17,7 +17,7 @@ class StyleAgent(BaseBuildAgent):
         existing_files = state.get("generated_files", {})
 
         domain = plan.get("domain", idea_spec.get("category", "saas")).lower()
-        app_name = idea_spec.get("name", plan.get("app_name", "app"))
+        app_name = plan.get("app_name", idea_spec.get("name", "app"))
 
         # Provide existing component/page code as context for styling
         context_files = {
@@ -26,18 +26,25 @@ class StyleAgent(BaseBuildAgent):
         }
 
         system_prompt = (
-            "You are a senior UI/UX designer and frontend developer. Generate the styling and theme "
+            "You are a senior UI/UX designer and frontend developer. Generate the styling and theme\n"
             "for a React + TypeScript app.\n\n"
             "Return a JSON object where each key is a file path and value is the complete file content.\n\n"
-            "Requirements:\n"
-            "- tailwind.config.js: Complete Tailwind config with custom color palette, fonts, and spacing\n"
-            "- src/index.css: CSS with Tailwind directives, CSS custom properties, and base styles\n"
-            "- The color palette MUST be unique to this app — derive colors from the domain and app name\n"
-            "- Include dark mode support\n"
-            "- Define CSS custom properties for primary, secondary, accent, background, surface colors\n"
-            "- body should use the background color\n"
-            "- Use a professional color scheme appropriate for the app's domain\n"
-            "- DO NOT use generic/default Tailwind colors — create a distinctive brand palette"
+            "Required files:\n"
+            "- tailwind.config.js: Complete Tailwind v3 config. MUST use ESM syntax:\n"
+            "    export default { content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'], ... }\n"
+            "  Include custom color palette, font stack, and spacing.\n\n"
+            "- src/index.css: Tailwind directives + custom CSS:\n"
+            "    @tailwind base;\n"
+            "    @tailwind components;\n"
+            "    @tailwind utilities;\n"
+            "  Plus CSS custom properties for --color-primary, --color-secondary, etc.\n"
+            "  Body background color, font family, and base text styling.\n\n"
+            "CRITICAL:\n"
+            "- tailwind.config.js MUST use 'export default' (ESM) — NOT 'module.exports' (CJS)\n"
+            "- The content array MUST include './index.html' and './src/**/*.{js,ts,jsx,tsx}'\n"
+            "- Color palette must be unique and domain-appropriate — not default Tailwind\n"
+            "- Include dark mode support (darkMode: 'class')\n"
+            "- DO NOT include postcss.config.js — it's already generated"
         )
 
         user_prompt = (
