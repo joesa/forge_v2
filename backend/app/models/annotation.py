@@ -14,6 +14,7 @@ class Annotation(TimestampMixin, Base):
         Index("ix_annotations_user_id", "user_id"),
         Index("ix_annotations_editor_session_id", "editor_session_id"),
         Index("ix_annotations_user_id_status", "user_id", "status"),
+        Index("ix_annotations_resolved", "resolved"),
     )
 
     project_id: Mapped[uuid.UUID] = mapped_column(

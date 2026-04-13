@@ -76,7 +76,10 @@ async def resolve_annotation(
     """Mark an annotation as resolved."""
     async with get_write_session() as session:
         result = await session.execute(
-            select(Annotation).where(Annotation.id == annotation_id)
+            select(Annotation).where(
+                Annotation.id == annotation_id,
+                Annotation.user_id == user_id,
+            )
         )
         annotation = result.scalar_one_or_none()
         if annotation is None:
@@ -96,7 +99,10 @@ async def delete_annotation(
     """Delete a single annotation."""
     async with get_write_session() as session:
         result = await session.execute(
-            select(Annotation).where(Annotation.id == annotation_id)
+            select(Annotation).where(
+                Annotation.id == annotation_id,
+                Annotation.user_id == user_id,
+            )
         )
         annotation = result.scalar_one_or_none()
         if annotation is None:

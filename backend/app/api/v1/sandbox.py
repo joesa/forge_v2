@@ -4,8 +4,10 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
+from jose import jwt, JWTError
 from pydantic import BaseModel, Field
 
+from app.config import settings
 from app.services import annotation_service, preview_service, snapshot_service
 
 router = APIRouter(prefix="/api/v1/sandbox", tags=["sandbox"])
@@ -87,11 +89,22 @@ async def console_ws(sandbox_id: uuid.UUID, websocket: WebSocket):
     """
     await websocket.accept()
     try:
-        # First message should be auth token — validated by middleware for HTTP,
-        # but for WS we need manual check
+        # First message must be a valid JWT — HTTP middleware doesn't cover WS
         auth_msg = await websocket.receive_text()
-        # Placeholder: in production, validate JWT from auth_msg
-        # and verify sandbox ownership
+        try:
+            payload = jwt.decode(
+                auth_msg,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated",
+            )
+            user_id = uuid.UUID(payload["sub"])
+        except (JWTError, KeyError, ValueError):
+            await websocket.close(code=4001, reason="Invalid token")
+            return
+
+        # Verify sandbox ownership
+        await preview_service._get_sandbox_with_ownership(sandbox_id, user_id)
 
         await websocket.send_json({"type": "connected", "sandbox_id": str(sandbox_id)})
 

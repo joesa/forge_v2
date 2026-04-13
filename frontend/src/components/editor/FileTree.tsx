@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useEditorStore, type FileNode } from '@/stores/editorStore'
 
 interface FileTreeProps {
@@ -30,15 +30,29 @@ function FileTreeItem({
   const isCollapsed = collapsedDirs.has(node.path)
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const closeRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (closeRef.current) {
+        document.removeEventListener('click', closeRef.current)
+      }
+    }
+  }, [])
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault()
+      if (closeRef.current) {
+        document.removeEventListener('click', closeRef.current)
+      }
       setContextMenu({ x: e.clientX, y: e.clientY })
       const close = () => {
         setContextMenu(null)
         document.removeEventListener('click', close)
+        closeRef.current = null
       }
+      closeRef.current = close
       document.addEventListener('click', close)
     },
     [],
