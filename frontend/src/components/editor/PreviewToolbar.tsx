@@ -85,13 +85,13 @@ export default function PreviewToolbar({
   const handleShare = useCallback(async () => {
     if (!sandboxId) return
     try {
-      const { data } = await apiClient.post<{ share_url: string }>(
+      const { data } = await apiClient.post<{ preview_url: string }>(
         `/sandbox/${sandboxId}/preview/share`,
         { expires_hours: 24 },
       )
-      setShareUrl(data.share_url)
+      setShareUrl(data.preview_url)
       setSharePopover(true)
-      await navigator.clipboard.writeText(data.share_url)
+      await navigator.clipboard.writeText(data.preview_url)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
@@ -186,6 +186,15 @@ export default function PreviewToolbar({
         title="Desktop"
       >
         💻
+      </button>
+
+      {/* Open in external window */}
+      <button
+        style={{ ...btnBase, opacity: previewUrl ? 1 : 0.3 }}
+        onClick={() => { if (previewUrl) window.open(previewUrl, '_blank', 'noopener') }}
+        title="Open in new window"
+      >
+        ↗
       </button>
 
       {/* Separator */}

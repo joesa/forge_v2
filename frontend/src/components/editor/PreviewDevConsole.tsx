@@ -202,7 +202,12 @@ export default function PreviewDevConsole({ sandboxId }: PreviewDevConsoleProps)
     return () => {
       unmounted = true
       if (timer) clearTimeout(timer)
-      if (ws) ws.close()
+      if (ws) {
+        // Guard: only close if the connection is open or connecting
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close()
+        }
+      }
     }
   }, [sandboxId])
 
