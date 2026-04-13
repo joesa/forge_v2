@@ -145,10 +145,11 @@ function startDevServer() {
     try {
       const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
       const scripts = pkg.scripts || {};
-      // If there's a custom dev script, use it
+      // If there's a custom dev script, use it (don't append --host/--port since the
+      // generated dev script already includes them)
       if (scripts.dev) {
         startCmd = "npm";
-        startArgs = ["run", "dev", "--", "--host", "0.0.0.0", "--port", String(DEV_SERVER_PORT)];
+        startArgs = ["run", "dev"];
       }
     } catch { /* ignore parse errors, fall back to vite */ }
   }
