@@ -25,9 +25,9 @@ async def claim_or_provision_sandbox(project_id: uuid.UUID) -> str:
             select(Sandbox).where(
                 Sandbox.project_id == project_id,
                 Sandbox.status.in_([SandboxStatus.claimed, SandboxStatus.warm, SandboxStatus.building]),
-            )
+            ).order_by(Sandbox.created_at.desc())
         )
-        existing = result.scalar_one_or_none()
+        existing = result.scalars().first()
         if existing:
             return str(existing.id)
 
