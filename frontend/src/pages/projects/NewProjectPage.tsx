@@ -1,8 +1,16 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import apiClient from '@/api/client'
 
 const cloudServices = ['Supabase', 'Stripe', 'OpenAI', 'Resend', 'Twilio', 'AWS S3', 'Cloudflare', 'Auth0', 'Pinecone', 'SendGrid']
-const frameworks = ['Next.js', 'React + Vite', 'Remix', 'FastAPI + React']
+
+const frameworkMap: Record<string, string> = {
+  'Next.js': 'nextjs',
+  'React + Vite': 'vite_react',
+  'FastAPI + React': 'fastapi',
+  'Express': 'express',
+}
+const frameworks = Object.keys(frameworkMap)
 
 export default function NewProjectPage() {
   const navigate = useNavigate()
@@ -11,6 +19,27 @@ export default function NewProjectPage() {
   const [aiEnhance, setAiEnhance] = useState(true)
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set())
   const [selectedFramework, setSelectedFramework] = useState('Next.js')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+
+  const handleStartBuild = async () => {
+    if (!prompt.trim()) return
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      const { data } = await apiClient.post('/projects', {
+        name: prompt.slice(0, 80),
+        framework: frameworkMap[selectedFramework] ?? 'nextjs',
+        description: prompt,
+      })
+      navigate(`/pipeline/${data.id}`)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setSubmitError(msg ?? 'Failed to create project')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const toggleService = (s: string) => {
     const next = new Set(selectedServices)
@@ -123,8 +152,12 @@ export default function NewProjectPage() {
             </div>
           </div>
 
-          <button className="btn btn-primary" style={{ width: '100%', height: 50, fontSize: 14 }}>
-            Start Building →
+          {submitError && (
+            <div style={{ background: 'var(--ember-dim)', border: '1px solid rgba(255,107,53,0.22)', borderRadius: 8, padding: '10px 14px', marginBottom: 13, fontSize: 12, color: 'var(--ember)' }}>{submitError}</div>
+          )}
+
+          <button className="btn btn-primary" style={{ width: '100%', height: 50, fontSize: 14 }} onClick={handleStartBuild} disabled={submitting || !prompt.trim()}>
+            {submitting ? 'Creating project…' : 'Start Building →'}
           </button>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, textAlign: 'center', color: 'rgba(232,232,240,0.30)', marginTop: 9 }}>
             Estimated build time: 8–15 minutes · Zero broken builds guaranteed

@@ -5,6 +5,7 @@ import { useEditor } from '@/hooks/useEditor'
 import ForgeMonacoEditor, { langFromPath } from '@/components/editor/MonacoEditor'
 import FileTree from '@/components/editor/FileTree'
 import EditorTabs from '@/components/editor/EditorTabs'
+import PreviewPane from '@/components/editor/PreviewPane'
 
 const activityIcons = ['📁', '🔍', '⚡', '🔀', '🐛', '🧪']
 
@@ -119,35 +120,7 @@ export default function EditorPage() {
         </div>
 
         {/* Preview pane (conditional) */}
-        {previewVisible && (
-          <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {/* Preview toolbar */}
-            <div style={{ height: 38, background: 'rgba(4,4,10,0.95)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 10px', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-              <span style={{ fontSize: 11, color: 'rgba(232,232,240,0.30)', cursor: 'pointer' }}>←</span>
-              <span style={{ fontSize: 11, color: 'rgba(232,232,240,0.30)', cursor: 'pointer' }}>→</span>
-              <div style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: 'rgba(232,232,240,0.30)', background: 'rgba(255,255,255,0.04)', borderRadius: 4, padding: '4px 8px' }}>localhost:3000/dashboard</div>
-              <span style={{ fontSize: 10, cursor: 'pointer', color: 'rgba(232,232,240,0.30)' }}>📱</span>
-              <span style={{ fontSize: 10, cursor: 'pointer', color: '#63d9ff' }}>💻</span>
-            </div>
-
-            {/* Preview body — placeholder */}
-            <div style={{ flex: 1, background: '#04040a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'rgba(232,232,240,0.20)' }}>Preview — Phase 3</span>
-            </div>
-
-            {/* Snapshot timeline — placeholder */}
-            <div style={{ height: 38, background: 'rgba(4,4,10,0.95)', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', padding: '0 10px', gap: 5, flexShrink: 0 }}>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: 'rgba(232,232,240,0.30)' }}>BUILD</span>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 3 }}>
-                {Array.from({ length: 10 }, (_, i) => (
-                  <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: i < 6 ? '#3dffa0' : 'rgba(232,232,240,0.15)' }} />
-                ))}
-              </div>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3dffa0', animation: 'jade-pulse 2s ease-in-out infinite' }} />
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: '#3dffa0' }}>● LIVE</span>
-            </div>
-          </div>
-        )}
+        {previewVisible && <PreviewPane />}
 
         {/* Chat panel */}
         <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', background: '#080812', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
