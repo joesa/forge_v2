@@ -10,7 +10,7 @@ routes = [
 # KV namespace for sandbox URL registry
 [[kv_namespaces]]
 binding = "SANDBOX_URLS"
-id = "PLACEHOLDER_KV_ID"
+id = "cc6d7e21be23442db30188a55ac78117"
 
 # Durable Object for HMR WebSocket relay
 [durable_objects]

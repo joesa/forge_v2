@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     NORTHFLANK_BUILD_SERVICE_ID: str = "sandbox-image"
     NORTHFLANK_SANDBOX_PLAN: str = "nf-compute-200"
     FORGE_SERVICE_TOKEN: str = ""  # service-to-service auth for sandbox agent
+    FORGE_API_PUBLIC_URL: str = ""  # public URL for sandbox→backend communication
 
     # ── Redis ────────────────────────────────────────────────────
     REDIS_URL: str = ""

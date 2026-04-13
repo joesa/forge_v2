@@ -164,6 +164,7 @@ async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, An
                             "periodSeconds": 10,
                             "timeoutSeconds": 5,
                             "failureThreshold": 3,
+                            "successThreshold": 1,
                         },
                     ],
                 },
@@ -222,6 +223,8 @@ async def call_northflank_api(action: str, data: dict[str, Any]) -> dict[str, An
 
 def _get_forge_api_url() -> str:
     """Return the public backend URL for sandbox→backend communication."""
+    if settings.FORGE_API_PUBLIC_URL:
+        return settings.FORGE_API_PUBLIC_URL
     if settings.FORGE_ENV == "development":
         return "http://host.docker.internal:8000"
     return f"https://api.{settings.PREVIEW_DOMAIN.replace('preview.', '')}"
