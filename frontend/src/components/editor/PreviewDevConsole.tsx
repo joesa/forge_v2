@@ -64,7 +64,10 @@ type WsMsg = WsConsoleMsg | WsNetworkRequestMsg | WsNetworkResponseMsg
 
 function getWsBase(): string {
   const api = import.meta.env.VITE_API_BASE_URL as string | undefined
-  if (!api) return `wss://${window.location.host}`
+  if (!api) {
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    return `${proto}://${window.location.host}`
+  }
   return api.replace(/^http/, 'ws')
 }
 

@@ -5,7 +5,7 @@ import apiClient from '@/api/client'
 const HEALTH_POLL_INTERVAL = 30_000
 
 interface PreviewUrlResponse {
-  preview_url: string
+  preview_url: string | null
   sandbox_id: string
 }
 
@@ -38,7 +38,7 @@ export function usePreview(sandboxId: string | null) {
         )
         if (!cancelled) {
           setPreviewUrl(data.preview_url)
-          setHealthy(true)
+          setHealthy(!!data.preview_url)
         }
       } catch {
         if (!cancelled) {

@@ -52,8 +52,12 @@ async def get_preview_url(
     # Use stored direct URL if available (Northflank), fall back to preview domain
     if sandbox.sandbox_url:
         preview_url = sandbox.sandbox_url
-    else:
+    elif sandbox.northflank_service_id:
+        # Container exists but URL not stored — use preview domain
         preview_url = f"https://{sandbox_id}.{settings.PREVIEW_DOMAIN}"
+    else:
+        # No container provisioned yet
+        preview_url = None
     return {
         "sandbox_id": str(sandbox.id),
         "preview_url": preview_url,
