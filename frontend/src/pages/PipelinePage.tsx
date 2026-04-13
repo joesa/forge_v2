@@ -5,7 +5,7 @@ import apiClient from '@/api/client'
 
 type StageStatus = 'done' | 'running' | 'pending' | 'failed'
 
-interface Stage { name: string; status: StageStatus; duration: string }
+interface Stage { name: string; status: StageStatus; duration: string; detail: Record<string, unknown> }
 
 interface AgentCard {
   emoji: string
@@ -67,7 +67,7 @@ export default function PipelinePage() {
   const [projectName, setProjectName] = useState('')
   const [, setPipelineId] = useState<string | null>(null)
   const [stages, setStages] = useState<Stage[]>(
-    STAGE_NAMES.map(n => ({ name: n, status: 'pending', duration: '—' }))
+    STAGE_NAMES.map(n => ({ name: n, status: 'pending', duration: '—', detail: {} }))
   )
   const [agents, setAgents] = useState<AgentCard[]>(
     AGENT_ROLES.map(a => ({ ...a, status: 'pending', output: '', detail: {} }))
@@ -76,6 +76,7 @@ export default function PipelinePage() {
   const [elapsedStr, setElapsedStr] = useState('0:00')
   const [completed, setCompleted] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<AgentCard | null>(null)
+  const [selectedStage, setSelectedStage] = useState<Stage | null>(null)
 
   const startRef = useRef(Date.now())
   const timerRef = useRef<ReturnType<typeof setInterval>>(undefined)
@@ -94,9 +95,10 @@ export default function PipelinePage() {
     if (type === 'stage_update') {
       const idx = (data.stage as number) - 1
       const status = data.status as StageStatus
+      const detail = (data.detail as Record<string, unknown>) ?? undefined
       setStages(prev => {
         const next: Stage[] = prev.map((s, i) => {
-          if (i === idx) return { ...s, status, duration: status === 'done' ? elapsed(startRef.current) : s.duration }
+          if (i === idx) return { ...s, status, duration: status === 'done' ? elapsed(startRef.current) : s.duration, ...(detail ? { detail } : {}) }
           if (i === idx + 1 && status === 'done' && prev[i].status === 'pending') return { ...s, status: 'running' }
           return s
         })
@@ -268,7 +270,18 @@ export default function PipelinePage() {
         <div className="card" style={{ padding: 18 }}>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--muted)', marginBottom: 13 }}>PIPELINE STAGES</div>
           {stages.map((s, i) => (
-            <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 7px', borderBottom: i < stages.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none', cursor: 'pointer' }}>
+            <div key={s.name}
+              onClick={() => s.status === 'done' ? setSelectedStage(s) : undefined}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 7px',
+                borderBottom: i < stages.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                cursor: s.status === 'done' ? 'pointer' : 'default',
+                borderRadius: 6,
+                transition: 'background 150ms',
+              }}
+              onMouseEnter={e => { if (s.status === 'done') (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.03)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+            >
               <div style={statusCircle(s.status)}>{statusIcon(s.status, i)}</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{s.name}</div>
@@ -280,6 +293,7 @@ export default function PipelinePage() {
                 </div>
               </div>
               <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--muted)' }}>{s.duration}</span>
+              {s.status === 'done' && <span style={{ color: 'var(--muted)', fontSize: 12, marginLeft: 2 }}>›</span>}
             </div>
           ))}
         </div>
@@ -389,8 +403,44 @@ export default function PipelinePage() {
         </div>
       )}
 
+      {/* Stage detail modal */}
+      {selectedStage && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSelectedStage(null)}>
+          <div className="card" style={{ padding: 28, maxWidth: 640, width: '90%', maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <div style={statusCircle(selectedStage.status)}>{statusIcon(selectedStage.status, stages.indexOf(selectedStage))}</div>
+              <div style={{ flex: 1 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 700 }}>{selectedStage.name}</h2>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: selectedStage.status === 'done' ? '#3dffa0' : '#63d9ff', textTransform: 'uppercase' }}>
+                  {selectedStage.status === 'done' ? `Completed in ${selectedStage.duration}` : selectedStage.status}
+                </span>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedStage(null)} style={{ fontSize: 16, padding: '4px 8px' }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {Object.entries(selectedStage.detail).length > 0 ? (
+                Object.entries(selectedStage.detail).map(([key, value]) => (
+                  <div key={key} style={{ background: '#0a0a1a', borderRadius: 8, padding: '12px 14px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: 'rgba(232,232,240,0.40)', textTransform: 'uppercase', marginBottom: 6 }}>
+                      {key.replace(/_/g, ' ')}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text)', lineHeight: 1.7 }}>
+                      {renderDetailValue(value)}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ background: '#0a0a1a', borderRadius: 8, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>No detailed output available yet for this stage.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Completion overlay */}
-      {completed && (
+      {completed && !selectedStage && !selectedAgent && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="card" style={{ padding: 36, maxWidth: 420, textAlign: 'center' }}>
             <div style={{ fontSize: 48, marginBottom: 14 }}>🎉</div>

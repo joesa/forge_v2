@@ -112,20 +112,23 @@ _CSUITE_AGENTS: list[BaseCSuiteAgent] = [
 ]
 
 
-async def _publish(state: PipelineState, stage: int, status: str, message: str) -> None:
+async def _publish(state: PipelineState, stage: int, status: str, message: str, *, detail: dict | None = None) -> None:
     if redis_client is None:
         return
     # Map "completed" → "done" for frontend StageStatus compatibility
     ws_status = "done" if status == "completed" else status
+    msg: dict = {
+        "type": "stage_update",
+        "stage": stage,
+        "status": ws_status,
+        "message": message,
+        "timestamp_ms": int(time.time() * 1000),
+    }
+    if detail is not None:
+        msg["detail"] = detail
     await redis_client.publish(
         f"pipeline:{state['pipeline_id']}",
-        json.dumps({
-            "type": "stage_update",
-            "stage": stage,
-            "status": ws_status,
-            "message": message,
-            "timestamp_ms": int(time.time() * 1000),
-        }),
+        json.dumps(msg),
     )
 
 
@@ -173,7 +176,11 @@ async def input_layer(state: PipelineState) -> PipelineState:
             env_vars[var] = ""
         idea_spec["env_vars"] = env_vars
 
-    await _publish(state, 1, "completed", "Input validated")
+    await _publish(state, 1, "completed", "Input validated", detail={
+        "idea_spec": idea_spec,
+        "gate_g1": g1,
+        "env_contract": env_result,
+    })
     return state
 
 
@@ -216,7 +223,17 @@ async def csuite_analysis(state: PipelineState) -> PipelineState:
     g3 = validate_g3(state)
     state.setdefault("gate_results", {})["g3"] = g3
 
-    await _publish(state, 2, "completed", "C-suite analysis done")
+    # Build a summary of each agent's output for the stage detail
+    agent_summaries = {}
+    for name, output in resolved_outputs.items():
+        agent_summaries[name] = _extract_summary(name, output) or "Analysis complete"
+    await _publish(state, 2, "completed", "C-suite analysis done", detail={
+        "agents_run": len(resolved_outputs),
+        "agent_summaries": agent_summaries,
+        "gate_g2": g2,
+        "gate_g3": g3,
+        "conflict_resolutions": resolutions,
+    })
     return state
 
 
@@ -250,7 +267,20 @@ async def synthesis(state: PipelineState) -> PipelineState:
     idea_spec = state.get("idea_spec", {})
     state["comprehensive_plan"] = await flatten_plan(plan, idea_spec)
 
-    await _publish(state, 3, "completed", "Synthesis done")
+    # Extract key plan sections for detail display
+    plan_summary = {}
+    if isinstance(state.get("comprehensive_plan"), dict):
+        cp = state["comprehensive_plan"]
+        for key in ["pages", "entities", "features", "components", "api_routes"]:
+            val = cp.get(key)
+            if isinstance(val, list):
+                plan_summary[key] = f"{len(val)} items"
+            elif val is not None:
+                plan_summary[key] = val
+    await _publish(state, 3, "completed", "Synthesis done", detail={
+        "plan_overview": plan_summary,
+        "gate_g4": g4,
+    })
     return state
 
 
@@ -286,7 +316,13 @@ async def spec_layer(state: PipelineState) -> PipelineState:
     state.setdefault("spec_outputs", {})["ts_interfaces"] = ts_interfaces
     state.setdefault("spec_outputs", {})["model_defs"] = model_defs
 
-    await _publish(state, 4, "completed", "Specs generated")
+    await _publish(state, 4, "completed", "Specs generated", detail={
+        "openapi_endpoints": len(openapi_spec.get("paths", {})) if isinstance(openapi_spec, dict) else 0,
+        "model_defs": list(model_defs.keys()) if isinstance(model_defs, dict) else [],
+        "pydantic_models": bool(pydantic_code),
+        "zod_schemas": bool(zod_code),
+        "ts_interfaces": bool(ts_interfaces),
+    })
     return state
 
 
@@ -303,7 +339,10 @@ async def bootstrap(state: PipelineState) -> PipelineState:
 
     # Cache check (placeholder)
 
-    await _publish(state, 5, "completed", "Manifest ready")
+    await _publish(state, 5, "completed", "Manifest ready", detail={
+        "gate_g6": g6,
+        "manifest": state.get("build_manifest", {}),
+    })
     return state
 
 
@@ -464,7 +503,13 @@ async def build(state: PipelineState) -> PipelineState:
     except Exception as e:
         logger.error("Sandbox provisioning failed (non-fatal): %s", e)
 
-    await _publish(state, 6, "completed", "Build complete")
+    await _publish(state, 6, "completed", "Build complete", detail={
+        "files_generated": len(state.get("generated_files", {})),
+        "file_list": sorted(state.get("generated_files", {}).keys()),
+        "agents_completed": [a.name for a in BUILD_AGENTS],
+        "review_report": state.get("gate_results", {}).get("review", {}),
+        "sandbox_id": state.get("sandbox_id"),
+    })
     return state
 
 
