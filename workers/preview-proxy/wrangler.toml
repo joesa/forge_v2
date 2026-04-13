@@ -2,10 +2,10 @@ name = "preview-proxy"
 main = "src/index.ts"
 compatibility_date = "2024-09-23"
 
-# Routes: *.preview.forge.dev/*
-routes = [
-  { pattern = "*.preview.forge.dev/*", zone_name = "forge.dev" }
-]
+# Routes: *.preview.forge.dev/* (uncomment when forge.dev zone is configured in Cloudflare)
+# routes = [
+#   { pattern = "*.preview.forge.dev/*", zone_name = "forge.dev" }
+# ]
 
 # KV namespace for sandbox URL registry
 [[kv_namespaces]]
