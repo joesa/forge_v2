@@ -35,8 +35,11 @@ async def create_session(request: Request, body: SessionCreate):
     # Verify user owns the project
     await project_service.get_project(body.project_id, uid)
 
-    # Claim or provision a sandbox for this project
-    sandbox_id_str = await sandbox_service.claim_or_provision_sandbox(body.project_id)
+    # Prefer existing sandbox (provisioned by pipeline Stage 6)
+    sandbox_id_str = await sandbox_service.get_project_sandbox(body.project_id)
+    if not sandbox_id_str:
+        # No sandbox yet — user opened editor before build finished; provision one
+        sandbox_id_str = await sandbox_service.claim_or_provision_sandbox(body.project_id)
     sandbox_uuid = UUID(sandbox_id_str) if sandbox_id_str else None
 
     async with get_write_session() as db:

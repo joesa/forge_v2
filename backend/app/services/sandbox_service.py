@@ -11,6 +11,36 @@ from app.models.project import Project
 from app.models.sandbox import Sandbox, SandboxStatus
 
 
+async def get_project_sandbox(project_id: uuid.UUID) -> str | None:
+    """Return existing sandbox_id for a project, or None if no active sandbox."""
+    async with get_read_session() as db:
+        result = await db.execute(
+            select(Sandbox).where(
+                Sandbox.project_id == project_id,
+                Sandbox.status.in_([SandboxStatus.claimed, SandboxStatus.warm, SandboxStatus.building]),
+            ).order_by(Sandbox.created_at.desc())
+        )
+        existing = result.scalars().first()
+        return str(existing.id) if existing else None
+
+
+async def wait_for_sandbox_ready(sandbox_id: str, timeout: float = 120, poll_interval: float = 3) -> bool:
+    """Poll DB until sandbox has northflank_service_id and sandbox_url. Returns True if ready."""
+    import asyncio
+
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        async with get_read_session() as db:
+            result = await db.execute(
+                select(Sandbox).where(Sandbox.id == uuid.UUID(sandbox_id))
+            )
+            sandbox = result.scalar_one_or_none()
+            if sandbox and sandbox.northflank_service_id and sandbox.sandbox_url:
+                return True
+        await asyncio.sleep(poll_interval)
+    return False
+
+
 async def claim_or_provision_sandbox(project_id: uuid.UUID) -> str:
     """Claim a warm sandbox or provision a new one. Returns sandbox_id.
 

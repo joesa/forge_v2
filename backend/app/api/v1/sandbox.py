@@ -106,7 +106,11 @@ async def console_ws(sandbox_id: uuid.UUID, websocket: WebSocket):
             return
 
         # Verify sandbox ownership
-        await preview_service._get_sandbox_with_ownership(sandbox_id, user_id)
+        try:
+            await preview_service._get_sandbox_with_ownership(sandbox_id, user_id)
+        except HTTPException:
+            await websocket.close(code=4003, reason="Sandbox not found")
+            return
 
         await websocket.send_json({"type": "connected", "sandbox_id": str(sandbox_id)})
 

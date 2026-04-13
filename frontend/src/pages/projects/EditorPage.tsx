@@ -6,6 +6,7 @@ import ForgeMonacoEditor, { langFromPath } from '@/components/editor/MonacoEdito
 import FileTree from '@/components/editor/FileTree'
 import EditorTabs from '@/components/editor/EditorTabs'
 import PreviewPane from '@/components/editor/PreviewPane'
+import ChatPanel from '@/components/editor/ChatPanel'
 
 const activityIcons = ['📁', '🔍', '⚡', '🔀', '🐛', '🧪']
 
@@ -123,61 +124,7 @@ export default function EditorPage() {
         {previewVisible && <PreviewPane />}
 
         {/* Chat panel */}
-        <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', background: '#080812', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Chat header */}
-          <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
-            <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'linear-gradient(135deg, #63d9ff, #b06bff)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>⚡</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 700 }}>Forge AI</div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: '#3dffa0' }}>● active · claude-sonnet-4</div>
-            </div>
-            <span style={{ fontSize: 12, color: 'rgba(232,232,240,0.30)', cursor: 'pointer' }}>⚙</span>
-          </div>
-
-          {/* Chat messages */}
-          <div style={{ flex: 1, padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 9 }}>
-            <div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, fontWeight: 700, letterSpacing: 0.5, color: 'rgba(232,232,240,0.35)', marginBottom: 3 }}>YOU</div>
-              <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: '9px 11px', fontSize: 11, lineHeight: 1.6, color: 'rgba(232,232,240,0.65)' }}>
-                Add a dark theme to the dashboard with chart components
-              </div>
-            </div>
-            <div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, fontWeight: 700, letterSpacing: 0.5, color: '#63d9ff', marginBottom: 3 }}>FORGE AI</div>
-              <div style={{ background: 'rgba(99,217,255,0.08)', border: '1px solid rgba(99,217,255,0.14)', borderRadius: 8, padding: '9px 11px', fontSize: 11, lineHeight: 1.6 }}>
-                I&apos;ll add a dark theme with chart components. Updating 3 files...
-                <div style={{ background: '#04040a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, overflow: 'hidden', marginTop: 6 }}>
-                  <div style={{ padding: '6px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#63d9ff' }}>globals.css</span>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="btn btn-ghost" style={{ height: 22, padding: '0 6px', fontSize: 9 }}>Copy</button>
-                      <button className="btn btn-primary" style={{ height: 22, padding: '0 6px', fontSize: 9 }}>Apply</button>
-                    </div>
-                  </div>
-                  <div style={{ padding: '9px 11px', fontFamily: "'JetBrains Mono', monospace", fontSize: 9, lineHeight: 1.7, color: 'rgba(232,232,240,0.55)' }}>
-                    :root {'{'}<br />
-                    &nbsp;&nbsp;--background: #04040a;<br />
-                    &nbsp;&nbsp;--foreground: #e8e8f0;<br />
-                    {'}'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Chat input */}
-          <div style={{ padding: '9px 10px', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
-              {['/build', '/deploy', '/test', '/lint'].map((cmd) => (
-                <span key={cmd} style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, padding: '2px 6px', background: 'rgba(99,217,255,0.08)', color: '#63d9ff', border: '1px solid rgba(99,217,255,0.18)', borderRadius: 3, cursor: 'pointer' }}>{cmd}</span>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 5 }}>
-              <textarea rows={2} style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace", fontSize: 10, resize: 'none', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 5, padding: '6px 9px', color: 'var(--text)', outline: 'none' }} placeholder="Ask Forge AI..." />
-              <button style={{ width: 28, height: 28, background: '#63d9ff', border: 'none', borderRadius: 5, color: '#04040a', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0, alignSelf: 'flex-end' }}>→</button>
-            </div>
-          </div>
-        </div>
+        <ChatPanel />
       </div>
 
       {/* Status bar */}

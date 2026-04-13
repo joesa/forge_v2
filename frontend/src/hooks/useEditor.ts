@@ -25,6 +25,9 @@ export function useEditor(projectId: string) {
   useEffect(() => {
     let cancelled = false
 
+    // Clear stale state from previous project before loading
+    reset()
+
     async function init() {
       try {
         const { data: session } = await apiClient.post('/editor/sessions', {

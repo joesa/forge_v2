@@ -105,29 +105,37 @@ function npmInstall() {
     status = "installing";
     console.log("[forge-agent] Running npm install...");
 
-    const proc = spawn("npm", ["install", "--prefer-offline", "--no-audit"], {
-      cwd: APP_DIR,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, NODE_ENV: "development" },
-    });
+    function runInstall(extraArgs = []) {
+      const args = ["install", "--prefer-offline", "--no-audit", ...extraArgs];
+      const proc = spawn("npm", args, {
+        cwd: APP_DIR,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, NODE_ENV: "development" },
+      });
 
-    let stderr = "";
-    proc.stdout.on("data", (d) => process.stdout.write(d));
-    proc.stderr.on("data", (d) => {
-      stderr += d.toString();
-      process.stderr.write(d);
-    });
+      let stderr = "";
+      proc.stdout.on("data", (d) => process.stdout.write(d));
+      proc.stderr.on("data", (d) => {
+        stderr += d.toString();
+        process.stderr.write(d);
+      });
 
-    proc.on("close", (code) => {
-      if (code === 0) {
-        console.log("[forge-agent] npm install complete");
-        resolve();
-      } else {
-        reject(new Error(`npm install exited with code ${code}: ${stderr.slice(-500)}`));
-      }
-    });
+      proc.on("close", (code) => {
+        if (code === 0) {
+          console.log("[forge-agent] npm install complete");
+          resolve();
+        } else if (extraArgs.length === 0 && stderr.includes("ERESOLVE")) {
+          console.log("[forge-agent] ERESOLVE conflict — retrying with --legacy-peer-deps...");
+          runInstall(["--legacy-peer-deps"]);
+        } else {
+          reject(new Error(`npm install exited with code ${code}: ${stderr.slice(-500)}`));
+        }
+      });
 
-    proc.on("error", reject);
+      proc.on("error", reject);
+    }
+
+    runInstall();
   });
 }
 

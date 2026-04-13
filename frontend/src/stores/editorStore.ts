@@ -22,6 +22,13 @@ export interface FileNode {
   children?: FileNode[]
 }
 
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  pending?: boolean
+}
+
 interface EditorState {
   projectId: string | null
   sandboxId: string | null
@@ -44,6 +51,8 @@ interface EditorState {
 
   devConsoleErrors: number
   chatVisible: boolean
+  chatMessages: ChatMessage[]
+  chatStreaming: boolean
 
   setProject: (projectId: string, sandboxId: string | null) => void
   setSession: (sessionId: string) => void
@@ -66,6 +75,10 @@ interface EditorState {
 
   setDevConsoleErrors: (count: number) => void
   setChatVisible: (visible: boolean) => void
+  addChatMessage: (msg: ChatMessage) => void
+  updateLastAssistantMessage: (content: string) => void
+  setChatStreaming: (streaming: boolean) => void
+  clearChat: () => void
 
   reset: () => void
 }
@@ -88,6 +101,8 @@ const initialState = {
   selectedSnapshot: null as string | null,
   devConsoleErrors: 0,
   chatVisible: true,
+  chatMessages: [] as ChatMessage[],
+  chatStreaming: false,
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -155,6 +170,20 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   setDevConsoleErrors: (count) => set({ devConsoleErrors: count }),
   setChatVisible: (visible) => set({ chatVisible: visible }),
+  addChatMessage: (msg) => set((s) => ({ chatMessages: [...s.chatMessages, msg] })),
+  updateLastAssistantMessage: (content) =>
+    set((s) => {
+      const msgs = [...s.chatMessages]
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].role === 'assistant') {
+          msgs[i] = { ...msgs[i], content, pending: false }
+          break
+        }
+      }
+      return { chatMessages: msgs }
+    }),
+  setChatStreaming: (streaming) => set({ chatStreaming: streaming }),
+  clearChat: () => set({ chatMessages: [], chatStreaming: false }),
 
   reset: () => set({ ...initialState, modifiedFiles: new Set() }),
 }))

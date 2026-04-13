@@ -41,6 +41,27 @@ class ScaffoldAgent(BaseBuildAgent):
             "autoprefixer": "^10.4.0",
         })
 
+        # Enforce minimum compatible versions for core toolchain
+        # (plan may hallucinate incompatible versions)
+        _REQUIRED_DEPS = {
+            "react": "^18.3.1",
+            "react-dom": "^18.3.1",
+        }
+        _REQUIRED_DEV_DEPS = {
+            "vite": "^5.4.0",
+            "@vitejs/plugin-react": "^4.3.0",
+            "typescript": "^5.4.0",
+            "@types/react": "^18.3.0",
+            "@types/react-dom": "^18.3.0",
+            "tailwindcss": "^3.4.0",
+            "postcss": "^8.4.0",
+            "autoprefixer": "^10.4.0",
+        }
+        for k, v in _REQUIRED_DEPS.items():
+            resolved_deps[k] = v
+        for k, v in _REQUIRED_DEV_DEPS.items():
+            dev_deps[k] = v
+
         # Layer 1: Generate package.json (deterministic — no LLM needed)
         package_json = generate_package_json(resolved_deps, dev_deps, name=app_name)
         env_template = get_env_template(framework)

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { User } from '@/types'
 import apiClient from '@/api/client'
+import { getValidToken } from '@/api/token'
 
 interface AuthState {
   user: User | null
@@ -17,7 +18,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
 
   initialize: async () => {
-    const token = localStorage.getItem('access_token')
+    const token = await getValidToken()
     if (!token) {
       set({ user: null, isLoading: false, isAuthenticated: false })
       return

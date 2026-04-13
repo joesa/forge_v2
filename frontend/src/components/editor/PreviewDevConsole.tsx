@@ -186,9 +186,12 @@ export default function PreviewDevConsole({ sandboxId }: PreviewDevConsoleProps)
         }
       }
 
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         if (unmounted) return
+        // Don't reconnect if sandbox not found or auth failed
+        if (ev.code === 4001 || ev.code === 4003) return
         attempt++
+        if (attempt > 8) return // stop after ~4 min of retries
         const delay = Math.min(1000 * 2 ** attempt, 30000)
         timer = setTimeout(connect, delay)
       }

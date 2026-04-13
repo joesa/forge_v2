@@ -58,6 +58,54 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+# ── Summary extraction for C-Suite cards ────────────────────────
+
+_SUMMARY_KEYS: dict[str, list[str]] = {
+    "ceo": ["business_model", "revenue_strategy", "competitive_moat"],
+    "cto": ["scalability_approach", "api_design"],
+    "cdo": ["design_system_recommendation"],
+    "cmo": ["positioning_statement", "gtm_strategy"],
+    "cpo": ["mvp_scope"],
+    "cso": ["auth_architecture"],
+    "cco": [],
+    "cfo": ["pricing_strategy", "breakeven_analysis"],
+}
+
+
+def _extract_summary(agent_name: str, output: dict) -> str:
+    """Build a concise summary for the pipeline card display."""
+    if not isinstance(output, dict):
+        return ""
+
+    parts: list[str] = []
+    # Try agent-specific keys first
+    for key in _SUMMARY_KEYS.get(agent_name, []):
+        val = output.get(key, "")
+        if isinstance(val, str) and len(val) > 5:
+            parts.append(val)
+            break
+        if isinstance(val, dict):
+            # e.g. tech_stack_recommendation
+            snippet = ", ".join(f"{k}: {v}" for k, v in val.items() if isinstance(v, str) and v)[:150]
+            if snippet:
+                parts.append(snippet)
+                break
+
+    # Fallback: gather key list/dict stats
+    if not parts:
+        for k, v in output.items():
+            if isinstance(v, str) and len(v) > 5:
+                parts.append(v)
+                break
+            if isinstance(v, list) and v:
+                items = [str(x) for x in v[:3]]
+                parts.append(f"{k}: {', '.join(items)}")
+                break
+
+    summary = parts[0] if parts else ""
+    return summary[:200]
+
 _CSUITE_AGENTS: list[BaseCSuiteAgent] = [
     CEOAgent(), CTOAgent(), CDOAgent(), CMOAgent(),
     CPOAgent(), CSOAgent(), CCOAgent(), CFOAgent(),
@@ -81,20 +129,23 @@ async def _publish(state: PipelineState, stage: int, status: str, message: str) 
     )
 
 
-async def _publish_agent(state: PipelineState, agent: str, status: str, output: str = "") -> None:
+async def _publish_agent(state: PipelineState, agent: str, status: str, output: str = "", *, detail: dict | None = None) -> None:
     """Publish a per-agent update (used for C-Suite cards)."""
     if redis_client is None:
         return
     ws_status = "done" if status == "completed" else status
+    msg: dict = {
+        "type": "agent_update",
+        "agent": agent,
+        "status": ws_status,
+        "output": output,
+        "timestamp_ms": int(time.time() * 1000),
+    }
+    if detail is not None:
+        msg["detail"] = detail
     await redis_client.publish(
         f"pipeline:{state['pipeline_id']}",
-        json.dumps({
-            "type": "agent_update",
-            "agent": agent,
-            "status": ws_status,
-            "output": output,
-            "timestamp_ms": int(time.time() * 1000),
-        }),
+        json.dumps(msg),
     )
 
 
@@ -138,16 +189,8 @@ async def csuite_analysis(state: PipelineState) -> PipelineState:
         await _publish_agent(state, agent.name, "running")
         output = await agent.execute(idea_spec)
         # Extract a short summary for the card display
-        summary = ""
-        if isinstance(output, dict):
-            summary = output.get("summary", output.get("headline", ""))
-            if not summary:
-                # Take first non-empty string value as summary
-                for v in output.values():
-                    if isinstance(v, str) and len(v) > 5:
-                        summary = v[:120]
-                        break
-        await _publish_agent(state, agent.name, "completed", summary)
+        summary = _extract_summary(agent.name, output)
+        await _publish_agent(state, agent.name, "completed", summary, detail=output)
         return agent.name, output
 
     results = await asyncio.gather(*[_run_agent(a) for a in _CSUITE_AGENTS])
@@ -407,10 +450,17 @@ async def build(state: PipelineState) -> PipelineState:
 
     # Provision a sandbox so the preview is ready when the user opens the editor
     try:
-        from app.services.sandbox_service import claim_or_provision_sandbox
+        from app.services.sandbox_service import claim_or_provision_sandbox, wait_for_sandbox_ready
         sandbox_id = await claim_or_provision_sandbox(project_uuid)
         state["sandbox_id"] = sandbox_id
-        logger.info("Sandbox provisioned: %s for project %s", sandbox_id, project_id)
+        logger.info("Sandbox provisioning started: %s for project %s", sandbox_id, project_id)
+
+        await _publish(state, 6, "in_progress", "Provisioning sandbox container…")
+        ready = await wait_for_sandbox_ready(sandbox_id, timeout=120)
+        if ready:
+            logger.info("Sandbox ready: %s", sandbox_id)
+        else:
+            logger.warning("Sandbox not ready after timeout: %s", sandbox_id)
     except Exception as e:
         logger.error("Sandbox provisioning failed (non-fatal): %s", e)
 

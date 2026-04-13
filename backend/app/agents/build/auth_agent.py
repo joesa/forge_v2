@@ -50,6 +50,17 @@ class AuthAgent(BaseBuildAgent):
             "CRITICAL: Use @supabase/supabase-js v2 API. The v1 methods (signIn, signUp without\n"
             "'WithPassword') do NOT exist in v2 and will cause runtime errors.\n"
             "Use import.meta.env for environment variables, NOT process.env.\n"
+            "If src/lib/supabase.ts is not in existing files, generate it with:\n"
+            "  const url = import.meta.env.VITE_SUPABASE_URL ?? ''\n"
+            "  const key = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''\n"
+            "  export const supabase = url ? createClient(url, key) : null as any\n"
+            "This prevents crashes when env vars are not yet configured.\n\n"
+            "CRITICAL: The supabase client CAN be null. Every function in auth.ts that calls\n"
+            "supabase.auth.* MUST check `if (!supabase)` first and return a safe default:\n"
+            "  - getSession → { data: { session: null }, error: null }\n"
+            "  - onAuthStateChange → { data: { subscription: { unsubscribe: () => {} } } }\n"
+            "  - signIn/signUp → { data: { user: null, session: null }, error: new Error('Supabase not configured') }\n"
+            "  - signOut → { error: null }\n"
             "All exports must use export default or named exports consistently."
         )
 

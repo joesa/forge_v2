@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import apiClient from '@/api/client'
@@ -12,6 +13,7 @@ interface AgentCard {
   agentName: string
   status: StageStatus
   output: string
+  detail: Record<string, unknown>
 }
 
 const STAGE_NAMES = [
@@ -68,7 +70,7 @@ export default function PipelinePage() {
     STAGE_NAMES.map(n => ({ name: n, status: 'pending', duration: '—' }))
   )
   const [agents, setAgents] = useState<AgentCard[]>(
-    AGENT_ROLES.map(a => ({ ...a, status: 'pending', output: '' }))
+    AGENT_ROLES.map(a => ({ ...a, status: 'pending', output: '', detail: {} }))
   )
   const [logs, setLogs] = useState<LogLine[]>([])
   const [elapsedStr, setElapsedStr] = useState('0:00')
@@ -108,7 +110,8 @@ export default function PipelinePage() {
       const agent = data.agent as string
       const status = data.status as StageStatus
       const output = (data.output as string) ?? ''
-      setAgents(prev => prev.map(a => (a.agentName === agent) ? { ...a, status, output } : a))
+      const detail = (data.detail as Record<string, unknown>) ?? {}
+      setAgents(prev => prev.map(a => (a.agentName === agent) ? { ...a, status, output, detail } : a))
       const matched = AGENT_ROLES.find(r => r.agentName === agent)
       addLog(status === 'done' ? 'success' : 'info', `${matched?.role ?? agent}: ${output || status}`)
     }
@@ -202,6 +205,43 @@ export default function PipelinePage() {
   const agentsDone = agents.filter(a => a.status === 'done').length
   const allDone = doneCount === stages.length
   const overallStatus = (completed || allDone) ? 'completed' : stages.some(s => s.status === 'failed') ? 'failed' : 'running'
+
+  const renderDetailValue = (value: unknown): ReactNode => {
+    if (value === null || value === undefined || value === '') return <span style={{ color: 'var(--muted)' }}>—</span>
+    if (typeof value === 'string') return <span style={{ whiteSpace: 'pre-wrap' }}>{value}</span>
+    if (typeof value === 'number' || typeof value === 'boolean') return <span>{String(value)}</span>
+    if (Array.isArray(value)) {
+      if (value.length === 0) return <span style={{ color: 'var(--muted)' }}>—</span>
+      return (
+        <ul style={{ margin: 0, paddingLeft: 16 }}>
+          {value.map((item, i) => (
+            <li key={i} style={{ marginBottom: 3 }}>
+              {typeof item === 'object' && item !== null
+                ? Object.entries(item as Record<string, unknown>).map(([k, v]) => (
+                    <span key={k}><strong style={{ color: 'rgba(232,232,240,0.55)' }}>{k}:</strong> {String(v)}  </span>
+                  ))
+                : String(item)}
+            </li>
+          ))}
+        </ul>
+      )
+    }
+    if (typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v !== '' && v !== null)
+      if (entries.length === 0) return <span style={{ color: 'var(--muted)' }}>—</span>
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {entries.map(([k, v]) => (
+            <div key={k}>
+              <strong style={{ color: 'rgba(232,232,240,0.55)' }}>{k.replace(/_/g, ' ')}:</strong>{' '}
+              {typeof v === 'string' ? v : JSON.stringify(v)}
+            </div>
+          ))}
+        </div>
+      )
+    }
+    return <span>{JSON.stringify(value)}</span>
+  }
 
   return (
     <div style={{ padding: '36px 40px', maxWidth: 1100 }}>
@@ -313,7 +353,7 @@ export default function PipelinePage() {
       {/* Agent detail modal */}
       {selectedAgent && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSelectedAgent(null)}>
-          <div className="card" style={{ padding: 28, maxWidth: 540, width: '90%', maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+          <div className="card" style={{ padding: 28, maxWidth: 600, width: '90%', maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <span style={{ fontSize: 28 }}>{selectedAgent.emoji}</span>
               <div style={{ flex: 1 }}>
@@ -322,8 +362,28 @@ export default function PipelinePage() {
               </div>
               <button className="btn btn-ghost btn-sm" onClick={() => setSelectedAgent(null)} style={{ fontSize: 16, padding: '4px 8px' }}>✕</button>
             </div>
-            <div style={{ background: '#0a0a1a', borderRadius: 8, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-              <p style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{selectedAgent.output || 'No detailed output available for this agent.'}</p>
+            {selectedAgent.output && (
+              <div style={{ background: 'rgba(99,217,255,0.06)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, border: '1px solid rgba(99,217,255,0.12)' }}>
+                <p style={{ fontSize: 12, color: '#63d9ff', lineHeight: 1.6, margin: 0 }}>{selectedAgent.output}</p>
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {Object.entries(selectedAgent.detail).length > 0 ? (
+                Object.entries(selectedAgent.detail).map(([key, value]) => (
+                  <div key={key} style={{ background: '#0a0a1a', borderRadius: 8, padding: '12px 14px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: 'rgba(232,232,240,0.40)', textTransform: 'uppercase', marginBottom: 6 }}>
+                      {key.replace(/_/g, ' ')}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text)', lineHeight: 1.7 }}>
+                      {renderDetailValue(value)}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ background: '#0a0a1a', borderRadius: 8, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>No detailed output available for this agent.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
