@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from uuid import UUID
@@ -305,3 +306,37 @@ async def auto_build_status(project_id: UUID, request: Request):
     if status is None:
         return {"status": "none"}
     return status
+
+
+# ── POST /api/v1/chat/auto-build/{project_id}/start ──────────────
+
+@router.post("/auto-build/{project_id}/start")
+async def auto_build_start(project_id: UUID, request: Request):
+    """Trigger auto-build for a project. Runs as a background task."""
+    uid = _user_id(request)
+
+    # Verify user owns the project
+    try:
+        await project_service.get_project(project_id, uid)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.services.auto_build_service import get_auto_build_status, run_auto_build
+
+    # Don't start if already running or completed
+    status = await get_auto_build_status(str(project_id))
+    if status and status.get("status") in ("running", "completed"):
+        return {"status": status["status"], "message": "Auto-build already " + status["status"]}
+
+    # Verify pipeline_context.json exists
+    try:
+        await storage_service.download_file(
+            settings.SUPABASE_BUCKET_PROJECTS,
+            f"{project_id}/pipeline_context.json",
+        )
+    except Exception:
+        return {"status": "none", "message": "No pipeline context available"}
+
+    # Launch auto-build as a background task (no Inngest dependency)
+    asyncio.create_task(run_auto_build(str(project_id)))
+    return {"status": "started"}

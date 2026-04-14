@@ -208,7 +208,26 @@ export default function ChatPanel() {
             })
           }
         }
-        // status === 'none' → no auto-build, normal chat
+        // status === 'none' → try to trigger auto-build if pipeline context exists
+        if (data.status === 'none') {
+          try {
+            const startResp = await apiClient.post(`/chat/auto-build/${projectId}/start`)
+            const startData = startResp.data as { status: string }
+            if (startData.status === 'started' || startData.status === 'running') {
+              setAutoBuildStatus('running')
+              if (messages.length === 0) {
+                addChatMessage({
+                  id: 'autobuild-intro',
+                  role: 'assistant',
+                  content: '🔨 **Auto-Build in progress** — Forge is generating your full application based on the pipeline analysis. Files are being written in real-time…',
+                })
+              }
+              connectAutoBuildWs(token)
+            }
+          } catch {
+            // No pipeline context or trigger failed — normal chat
+          }
+        }
       } catch {
         // Endpoint not available or error — proceed normally
       }
