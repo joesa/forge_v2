@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useEditorStore } from '@/stores/editorStore'
 import apiClient from '@/api/client'
+import { getValidToken } from '@/api/token'
 
 const AUTOSAVE_DELAY = 500
 
@@ -30,6 +31,10 @@ export function useEditor(projectId: string) {
 
     async function init() {
       try {
+        // Ensure token is valid before making editor requests
+        const token = await getValidToken()
+        if (!token || cancelled) return
+
         const { data: session } = await apiClient.post('/editor/sessions', {
           project_id: projectId,
         })
