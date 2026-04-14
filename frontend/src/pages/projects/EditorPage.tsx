@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useEditorStore } from '@/stores/editorStore'
 import { useEditor } from '@/hooks/useEditor'
+import apiClient from '@/api/client'
 import ForgeMonacoEditor, { langFromPath } from '@/components/editor/MonacoEditor'
 import FileTree from '@/components/editor/FileTree'
 import EditorTabs from '@/components/editor/EditorTabs'
@@ -23,6 +24,14 @@ export default function EditorPage() {
     togglePreview,
   } = useEditorStore()
   const [activeActivity, setActiveActivity] = useState(0)
+  const [projectName, setProjectName] = useState('')
+
+  useEffect(() => {
+    if (!projectId) return
+    apiClient.get<{ name: string }>(`/projects/${projectId}`).then(({ data }) => {
+      setProjectName(data.name)
+    }).catch(() => { /* ignore */ })
+  }, [projectId])
 
   const currentContent = activeFile ? (fileContents[activeFile] ?? '') : ''
   const currentLang = activeFile ? langFromPath(activeFile) : 'typescript'
@@ -47,7 +56,7 @@ export default function EditorPage() {
           <div style={{ width: 22, height: 22, background: 'linear-gradient(135deg, #63d9ff, #b06bff)', clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }} />
           <span style={{ fontWeight: 800, fontSize: 16, background: 'linear-gradient(135deg, #63d9ff, #b06bff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>FORGE</span>
           <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)', margin: '0 4px' }} />
-          <span style={{ fontSize: 12, color: 'rgba(232,232,240,0.55)', cursor: 'pointer' }}>SaaS Dashboard ▼</span>
+          <span style={{ fontSize: 12, color: 'rgba(232,232,240,0.55)', cursor: 'pointer' }}>{projectName || 'Loading…'} ▼</span>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'rgba(232,232,240,0.30)', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: 10 }}>○ main</span>
         </div>
         <div style={{ flex: 1 }} />

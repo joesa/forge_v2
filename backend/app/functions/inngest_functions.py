@@ -460,11 +460,17 @@ async def _sandbox_lifecycle_handler(
     if action == "destroy" and sandbox_id:
         await step.run("deregister-kv", deregister_sandbox_url_from_kv, sandbox_id)
 
+    # Fresh-provisioned sandboxes with a project_id should transition
+    # directly to "claimed" (not "warm") so file sync can find them.
+    final_status = action_to_status(action)
+    if action == "provision" and data.get("project_id"):
+        final_status = "claimed"
+
     await step.run(
         "update-sandbox-status",
         update_sandbox_status,
         sandbox_id,
-        action_to_status(action),
+        final_status,
     )
 
 

@@ -3,6 +3,8 @@ import { useEditorStore } from '@/stores/editorStore'
 import apiClient from '@/api/client'
 
 const HEALTH_POLL_INTERVAL = 30_000
+const BOOT_POLL_INTERVAL = 5_000  // Poll every 5s while sandbox is booting
+const MAX_BOOT_POLLS = 40         // Stop after ~200s
 
 interface PreviewUrlResponse {
   preview_url: string | null
@@ -19,10 +21,13 @@ export function usePreview(sandboxId: string | null) {
   const [loading, setLoading] = useState(false)
   const [healthy, setHealthy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [booting, setBooting] = useState(false)
 
   const { selectedSnapshot, snapshots } = useEditorStore()
 
   const healthTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const bootTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const bootPollCount = useRef(0)
 
   // Fetch preview URL on mount when sandboxId is available
   useEffect(() => {
@@ -38,7 +43,13 @@ export function usePreview(sandboxId: string | null) {
         )
         if (!cancelled) {
           setPreviewUrl(data.preview_url)
-          setHealthy(!!data.preview_url)
+          if (data.preview_url) {
+            // Start boot polling to wait for the sandbox to become ready 
+            setBooting(true)
+            bootPollCount.current = 0
+          } else {
+            setHealthy(false)
+          }
         }
       } catch {
         if (!cancelled) {
@@ -54,9 +65,69 @@ export function usePreview(sandboxId: string | null) {
     return () => { cancelled = true }
   }, [sandboxId])
 
-  // Poll health every 30s
+  // Boot polling: aggressively check if the sandbox dev server is reachable
   useEffect(() => {
-    if (!sandboxId) return
+    if (!booting || !previewUrl) return
+
+    let cancelled = false
+
+    async function poll() {
+      if (cancelled || bootPollCount.current >= MAX_BOOT_POLLS) {
+        setBooting(false)
+        return
+      }
+      bootPollCount.current++
+      try {
+        // Try to reach the sandbox directly via a HEAD/fetch to the preview URL
+        const resp = await fetch(previewUrl!, { mode: 'no-cors', cache: 'no-store' })
+        // no-cors: opaque response, but if we get here without error the server is up.
+        // For same-origin requests, check status
+        if (resp.type === 'opaque' || resp.ok) {
+          if (!cancelled) {
+            setHealthy(true)
+            setBooting(false)
+          }
+          return
+        }
+      } catch {
+        // Network error — sandbox not ready yet
+      }
+
+      // Also check via backend health endpoint
+      if (sandboxId) {
+        try {
+          const { data } = await apiClient.get<HealthResponse>(
+            `/sandbox/${sandboxId}/preview/health`,
+          )
+          if (data.status === 'healthy' && !cancelled) {
+            setHealthy(true)
+            setBooting(false)
+            return
+          }
+        } catch {
+          // Not ready yet
+        }
+      }
+
+      if (!cancelled) {
+        bootTimerRef.current = setTimeout(poll, BOOT_POLL_INTERVAL)
+      }
+    }
+
+    void poll()
+
+    return () => {
+      cancelled = true
+      if (bootTimerRef.current) {
+        clearTimeout(bootTimerRef.current)
+        bootTimerRef.current = null
+      }
+    }
+  }, [booting, previewUrl, sandboxId])
+
+  // Steady-state health polling (every 30s once sandbox is running)
+  useEffect(() => {
+    if (!sandboxId || booting) return
 
     async function checkHealth() {
       try {
@@ -77,7 +148,7 @@ export function usePreview(sandboxId: string | null) {
         healthTimerRef.current = null
       }
     }
-  }, [sandboxId])
+  }, [sandboxId, booting])
 
   // selectedSnapshot → show snapshot image instead of iframe
   const snapshotImageUrl = selectedSnapshot
@@ -103,6 +174,7 @@ export function usePreview(sandboxId: string | null) {
     previewUrl,
     loading,
     healthy,
+    booting,
     error,
     snapshotImageUrl,
     refresh,

@@ -10,10 +10,70 @@ const MONO = "'JetBrains Mono', monospace"
 
 export default function PreviewPane() {
   const { sandboxId, previewDevice, previewRoute, selectedSnapshot } = useEditorStore()
-  const { previewUrl, loading, healthy, error, snapshotImageUrl, refresh } =
+  const syncLive = useEditorStore((s) => s.syncSteps.live)
+  const chatStreaming = useEditorStore((s) => s.chatStreaming)
+  const { previewUrl, loading, healthy, booting, error, snapshotImageUrl, refresh } =
     usePreview(sandboxId)
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const lastReloadRef = useRef(0)
+  const wasStreamingRef = useRef(false)
+  const wasBootingRef = useRef(false)
+
+  /** Force-reload the preview iframe (handles cross-origin) */
+  const reloadIframe = () => {
+    const now = Date.now()
+    // Debounce: at most one reload per 2 seconds
+    if (now - lastReloadRef.current < 2000) return
+    lastReloadRef.current = now
+    const iframe = iframeRef.current
+    if (!iframe) return
+    try {
+      iframe.contentWindow?.location.reload()
+    } catch {
+      // Cross-origin — reassign src to force reload
+      if (iframe.src) {
+        const src = iframe.src
+        iframe.src = 'about:blank'
+        setTimeout(() => { iframe.src = src }, 50)
+      }
+    }
+  }
+
+  // Auto-reload iframe when sandbox transitions from booting → healthy
+  useEffect(() => {
+    if (booting) {
+      wasBootingRef.current = true
+      return
+    }
+    if (wasBootingRef.current && healthy) {
+      wasBootingRef.current = false
+      // Small delay to let the dev server fully initialize
+      const timer = setTimeout(() => reloadIframe(), 500)
+      return () => clearTimeout(timer)
+    }
+  }, [booting, healthy])
+
+  // Reload iframe when a chat edit sync reaches "live" status
+  useEffect(() => {
+    if (syncLive !== 'done') return
+    reloadIframe()
+  }, [syncLive])
+
+  // Reload iframe when chat streaming ends (edits were applied)
+  useEffect(() => {
+    if (chatStreaming) {
+      wasStreamingRef.current = true
+      return
+    }
+    // Streaming just stopped
+    if (wasStreamingRef.current) {
+      wasStreamingRef.current = false
+      // Delay to let sandbox agent write file + Vite recompile
+      const timer = setTimeout(() => reloadIframe(), 1500)
+      return () => clearTimeout(timer)
+    }
+  }, [chatStreaming])
 
   // Set auth cookie scoped to the preview URL domain
   useEffect(() => {
@@ -52,7 +112,7 @@ export default function PreviewPane() {
       <PreviewToolbar
         sandboxId={sandboxId}
         previewUrl={previewUrl}
-        onRefresh={refresh}
+        onRefresh={() => { refresh(); reloadIframe(); }}
         iframeRef={iframeRef}
       />
 
@@ -94,6 +154,35 @@ export default function PreviewPane() {
             }}
           >
             Loading preview…
+          </div>
+        ) : booting ? (
+          // Sandbox is booting — show progress instead of 503 iframe
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              gap: 12,
+              padding: 20,
+            }}
+          >
+            <div style={{
+              width: 24,
+              height: 24,
+              border: '2px solid rgba(99,217,255,0.2)',
+              borderTopColor: '#63d9ff',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }} />
+            <div style={{ color: 'rgba(232,232,240,0.55)', fontFamily: MONO, fontSize: 10, textAlign: 'center' }}>
+              Sandbox starting…
+            </div>
+            <div style={{ color: 'rgba(232,232,240,0.25)', fontFamily: MONO, fontSize: 9, textAlign: 'center' }}>
+              Installing dependencies &amp; starting dev server
+            </div>
+            <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
           </div>
         ) : error ? (
           // Error state

@@ -1,0 +1,2364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>FORGE — Complete Build Guide (Supabase + Inngest)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+html,body{background:#04040a!important;color:#eef0f6!important;color-scheme:dark!important;font-family:'Inter',-apple-system,sans-serif;font-size:15px;line-height:1.72;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+.layout{display:flex;min-height:100vh}
+.toc{width:244px;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto;background:#05050e;border-right:1px solid rgba(255,255,255,0.06);padding:14px 0;display:none}
+@media(min-width:1000px){.toc{display:block}}
+.toc-logo{display:flex;align-items:center;gap:8px;padding:2px 15px 13px;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:9px}
+.hex{width:19px;height:19px;flex-shrink:0;background:linear-gradient(135deg,#63d9ff,#b06bff);clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%)}
+.toc-brand{font-weight:700;font-size:12.5px;background:linear-gradient(135deg,#63d9ff,#b06bff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.toc-sec{padding:7px 15px 2px;font-size:9px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:rgba(238,240,246,0.2)}
+.toc a{display:block;padding:3px 15px;font-size:11px;color:rgba(238,240,246,0.4);text-decoration:none;transition:all .1s}
+.toc a:hover{color:#eef0f6;background:rgba(255,255,255,0.02)}
+.toc a.h2{font-weight:600;color:rgba(238,240,246,0.65);margin-top:2px}
+.toc a.h3{padding-left:25px;font-size:10.5px}
+.toc a.phase{color:#63d9ff;font-weight:600}
+.content{flex:1;padding:26px 18px 80px;min-width:0;max-width:860px;margin:0 auto}
+@media(min-width:1000px){.content{padding:38px 52px 80px}}
+h1{font-size:26px;font-weight:700;color:#fff;margin-bottom:5px;letter-spacing:-.4px}
+h2{font-size:18px;font-weight:700;color:#fff;margin:38px 0 11px;padding-bottom:7px;border-bottom:1px solid rgba(255,255,255,0.07)}
+h3{font-size:14.5px;font-weight:600;color:#eef0f6;margin:20px 0 8px}
+p{color:#b0b4c0;margin-bottom:11px}
+p strong{color:#eef0f6}
+ul,ol{padding-left:19px;margin-bottom:11px}
+li{color:#b0b4c0;margin-bottom:3px}
+li strong{color:#eef0f6}
+code{font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(99,217,255,0.09);border:1px solid rgba(99,217,255,0.17);border-radius:4px;padding:1px 5px;color:#8ecfff}
+a{color:#63d9ff;text-decoration:none}
+hr{border:none;border-top:1px solid rgba(255,255,255,0.07);margin:26px 0}
+.pnum{display:block;font-family:'JetBrains Mono',monospace;font-size:8.5px;font-weight:500;letter-spacing:2px;text-transform:uppercase;color:rgba(238,240,246,0.28);margin-bottom:3px}
+.hero{background:linear-gradient(135deg,#0b0820,#051510);border:1px solid rgba(99,217,255,0.14);border-radius:13px;padding:20px 18px;margin-bottom:22px}
+@media(min-width:600px){.hero{padding:24px 28px}}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(176,107,255,0.11);border:1px solid rgba(176,107,255,0.22);border-radius:20px;padding:3px 10px;font-size:10px;font-family:'JetBrains Mono',monospace;color:#c4b5fd;margin-bottom:9px}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:11px}
+.chip{font-family:'JetBrains Mono',monospace;font-size:9.5px;padding:2px 8px;border-radius:4px;font-weight:600}
+.ch-sb{background:rgba(61,255,160,0.09);color:#3dffa0;border:1px solid rgba(61,255,160,0.20)}
+.ch-nf{background:rgba(99,217,255,0.09);color:#63d9ff;border:1px solid rgba(99,217,255,0.20)}
+.ch-cf{background:rgba(245,200,66,0.09);color:#f5c842;border:1px solid rgba(245,200,66,0.20)}
+.ch-ig{background:rgba(176,107,255,0.09);color:#b06bff;border:1px solid rgba(176,107,255,0.20)}
+.ch-rm{background:rgba(255,107,53,0.07);color:#ff6b35;border:1px solid rgba(255,107,53,0.18);text-decoration:line-through;opacity:.55}
+.bcp{border-radius:10px;overflow:hidden;margin:13px 0;border:1px solid #18355c;background:#060e1a}
+.bcp .bh{display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:#040910;padding:8px 13px;border-bottom:1px solid #18355c}
+.bcp .badge{background:#18355c;color:#60a5fa;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:2px 7px;border-radius:4px;flex-shrink:0}
+.bcp .btitle{font-size:12px;font-weight:600;color:#93c5fd;flex:1}
+.bcp .bmode{font-size:10px;color:rgba(147,197,253,0.38);font-family:'JetBrains Mono',monospace}
+.bcp .bb{padding:12px 13px}
+.bcp .inst{font-size:12px;color:#93c5fd;margin-bottom:8px;font-weight:500}
+.bcp pre{background:rgba(0,0,0,.52);border:1px solid rgba(96,165,250,0.11);border-radius:7px;padding:12px 13px;margin:0;overflow-x:auto;white-space:pre-wrap;word-break:break-word}
+.bcp pre code{font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.72;background:none;border:none;padding:0;color:#dbeafe}
+.bt{border-radius:10px;overflow:hidden;margin:13px 0;border:1px solid #193d30;background:#040d08}
+.bt .bh{display:flex;align-items:center;gap:7px;background:#030a06;padding:8px 13px;border-bottom:1px solid #193d30}
+.bt .badge{background:#14532d;color:#4ade80;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:2px 7px;border-radius:4px}
+.bt .btitle{font-size:12px;font-weight:600;color:#86efac}
+.bt .bb{padding:12px 13px}
+.bt .inst{font-size:12px;color:#86efac;margin-bottom:8px;font-weight:500}
+.bt pre{background:rgba(0,0,0,.52);border:1px solid rgba(74,222,128,0.11);border-radius:7px;padding:12px 13px;margin:0;overflow-x:auto}
+.bt pre code{font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.72;background:none;border:none;padding:0;color:#d1fae5;white-space:pre}
+.bt .cm{color:rgba(74,222,128,0.32)!important;font-style:italic}
+.bt .pr{color:#4ade80!important;user-select:none}
+.bt .ok{font-size:12px;color:#86efac;margin-top:8px;font-weight:500}
+.br{border-radius:10px;overflow:hidden;margin:13px 0;border:1px solid #6b2f00;background:#0c0700}
+.br .bh{display:flex;align-items:center;gap:7px;background:#090500;padding:8px 13px;border-bottom:1px solid #6b2f00}
+.br .badge{background:#6b2f00;color:#fbbf24;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:2px 7px;border-radius:4px}
+.br .btitle{font-size:12px;font-weight:600;color:#fcd34d}
+.br .bb{padding:12px 13px}
+.br pre{background:rgba(0,0,0,.52);border:1px solid rgba(251,191,36,0.11);border-radius:7px;padding:12px 13px;margin:0;overflow-x:auto;white-space:pre-wrap}
+.br pre code{font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.72;background:none;border:none;padding:0;color:#fef3c7}
+.bi{background:#040c16;border:1px solid #1a3258;border-left:3px solid #60a5fa;border-radius:8px;padding:10px 13px;margin:10px 0;font-size:13px;color:#bfdbfe;line-height:1.6}
+.bi strong{color:#93c5fd}
+.bw{background:#0e0a00;border:1px solid #422b00;border-left:3px solid #fbbf24;border-radius:8px;padding:10px 13px;margin:10px 0;font-size:13px;color:#fde68a;line-height:1.6}
+.bw strong{color:#fbbf24}
+.bs{background:#030e05;border:1px solid #14532d;border-left:3px solid #4ade80;border-radius:8px;padding:10px 13px;margin:10px 0;font-size:13px;color:#86efac;line-height:1.6}
+.bs strong{color:#4ade80}
+.sc{background:#07070f;border:1px solid rgba(255,255,255,0.07);border-radius:12px;overflow:hidden;margin:13px 0}
+.sc-h{display:flex;align-items:center;gap:9px;padding:10px 14px;background:#0a0a18;border-bottom:1px solid rgba(255,255,255,0.07);flex-wrap:wrap}
+.sc-n{background:rgba(99,217,255,0.1);border:1px solid rgba(99,217,255,0.22);color:#63d9ff;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0}
+.sc-t{font-weight:600;font-size:13px;color:#eef0f6}
+.sc-d{font-size:11px;color:rgba(238,240,246,0.36);width:100%}
+.sc-b{padding:13px}
+.sr{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:12px}
+.sr:last-child{border-bottom:none}
+.sk{color:rgba(238,240,246,0.4);min-width:155px;flex-shrink:0}
+.sv{background:rgba(99,217,255,0.08);border:1px solid rgba(99,217,255,0.18);border-radius:5px;padding:2px 8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#63d9ff;font-weight:600}
+.ph{background:linear-gradient(135deg,rgba(99,217,255,0.05),rgba(176,107,255,0.05));border:1px solid rgba(99,217,255,0.15);border-radius:11px;padding:14px 18px;margin:24px 0 14px}
+.ph-b{display:inline-flex;align-items:center;background:rgba(99,217,255,0.10);border:1px solid rgba(99,217,255,0.20);border-radius:4px;padding:2px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:#63d9ff;margin-bottom:6px;letter-spacing:.4px}
+.ph-t{font-size:16px;font-weight:700;color:#fff;margin-bottom:3px}
+.ph-d{font-size:12.5px;color:rgba(238,240,246,0.4)}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12px;overflow-x:auto;display:block}
+@media(min-width:600px){table{display:table}}
+th{text-align:left;padding:7px 11px;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:rgba(238,240,246,0.32);border-bottom:1px solid rgba(255,255,255,0.07);background:#07070f}
+td{padding:8px 11px;border-bottom:1px solid rgba(255,255,255,0.05);color:#b0b4c0;vertical-align:top}
+tr:hover td{background:rgba(255,255,255,0.018)}
+.cl{background:#07070f;border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px 14px;margin:10px 0}
+.cl-t{font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(238,240,246,0.32);margin-bottom:8px;font-family:'JetBrains Mono',monospace}
+.cl-i{display:flex;align-items:flex-start;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px;color:#b0b4c0}
+.cl-i:last-child{border-bottom:none}
+.cb{width:14px;height:14px;border-radius:3px;border:1.5px solid rgba(255,255,255,0.15);flex-shrink:0;margin-top:2px}
+.mob{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(4,4,10,0.97);border-top:1px solid rgba(255,255,255,0.07);padding:7px 10px;display:flex;gap:5px;flex-wrap:nowrap;overflow-x:auto}
+@media(min-width:1000px){.mob{display:none}}
+.mb{padding:5px 9px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:rgba(238,240,246,0.4);font-family:'JetBrains Mono',monospace;font-size:9px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.pb{padding-bottom:50px}
+@media(min-width:1000px){.pb{padding-bottom:0}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc">
+  <div class="toc-logo"><div class="hex"></div><span class="toc-brand">FORGE · Build Guide</span></div>
+  <div class="toc-sec">Setup</div>
+  <a href="#setup" class="h2">Configuration</a>
+  <a href="#sb-setup" class="h3">Supabase project</a>
+  <a href="#ig-setup" class="h3">Inngest account</a>
+  <a href="#cp-setup" class="h3">Copilot + VS Code</a>
+  <a href="#proj-setup" class="h3">Project scaffold</a>
+  <a href="#ctx-files" class="h3">Context files</a>
+  <a href="#env-vars" class="h3">Environment vars</a>
+  <a href="#session-pat" class="h3">Session pattern</a>
+  <div class="toc-sec">Phase 1 — Foundation</div>
+  <a href="#p1" class="phase">Phase 1</a>
+  <a href="#s11" class="h3">1.1 Backend core</a>
+  <a href="#s12" class="h3">1.2 DB models</a>
+  <a href="#s13" class="h3">1.3 Auth API</a>
+  <a href="#s14" class="h3">1.4 Projects + Storage</a>
+  <a href="#s15" class="h3">1.5 Frontend setup</a>
+  <a href="#s16" class="h3">1.6 Router + AppShell</a>
+  <a href="#s17" class="h3">1.7 All 22 pages</a>
+  <a href="#s18" class="h3">1.8 Monaco editor</a>
+  <a href="#s19" class="h3">1.9 Phase 1 audit</a>
+  <div class="toc-sec">Phase 2 — Intelligence</div>
+  <a href="#p2" class="phase">Phase 2</a>
+  <a href="#s21" class="h3">2.1 LangGraph</a>
+  <a href="#s22" class="h3">2.2 C-Suite agents</a>
+  <a href="#s23" class="h3">2.3 Layers 1+2+4</a>
+  <a href="#s24" class="h3">2.4 Build agents</a>
+  <a href="#s25" class="h3">2.5 Layers 3+5+6</a>
+  <a href="#s26" class="h3">2.6 Layer 7 Wiremock</a>
+  <a href="#s27" class="h3">2.7 Layer 8 Verify</a>
+  <a href="#s28" class="h3">2.8 Layers 9+10</a>
+  <div class="toc-sec">Phase 3 — Preview</div>
+  <a href="#p3" class="phase">Phase 3</a>
+  <a href="#s31" class="h3">3.1 Preview backend</a>
+  <a href="#s32" class="h3">3.2 CF Worker</a>
+  <a href="#s33" class="h3">3.3 PreviewPane</a>
+  <a href="#s34" class="h3">3.4 Annotations</a>
+  <a href="#s35" class="h3">3.5 Timeline</a>
+  <a href="#s36" class="h3">3.6 DevConsole</a>
+  <div class="toc-sec">Phase 4 — Polish</div>
+  <a href="#p4" class="phase">Phase 4</a>
+  <a href="#s41" class="h3">4.1 Inngest functions</a>
+  <a href="#s42" class="h3">4.2 E2E test</a>
+  <a href="#s43" class="h3">4.3 Security audit</a>
+  <div class="toc-sec">Reference</div>
+  <a href="#master-rev" class="h2">Master self-review</a>
+  <a href="#model-sel" class="h2">Model selection</a>
+  <a href="#rules" class="h2">Architecture rules</a>
+  <a href="#debug" class="h2">Troubleshooting</a>
+  <a href="#filelist" class="h2">File checklist</a>
+</nav>
+<main class="content pb">
+
+<div class="hero">
+  <div class="hero-badge">⬡ FORGE · Complete Build Guide · Supabase + Inngest Stack</div>
+  <h1>Zero to production — one document</h1>
+  <p>Every session prompt, every self-review, every test command. GitHub Copilot + Opus 4.6 High. Supabase replaces Nhost + R2. Inngest replaces Trigger.dev. Nothing is missing.</p>
+  <div class="chips">
+    <span class="chip ch-sb">Supabase DB</span>
+    <span class="chip ch-sb">Supabase Auth</span>
+    <span class="chip ch-sb">Supabase Storage</span>
+    <span class="chip ch-nf">Northflank Compute</span>
+    <span class="chip ch-nf">Firecracker Sandboxes</span>
+    <span class="chip ch-ig">Inngest Jobs</span>
+    <span class="chip ch-cf">Cloudflare Workers</span>
+    <span class="chip ch-cf">Durable Objects</span>
+    <span class="chip ch-rm">Nhost removed</span>
+    <span class="chip ch-rm">R2 removed</span>
+    <span class="chip ch-rm">Trigger.dev removed</span>
+    <span class="chip ch-rm">boto3 removed</span>
+  </div>
+</div>
+
+<!-- SETUP -->
+<h2 id="setup"><span class="pnum">Before Session 1.1</span>Setup and configuration</h2>
+
+<h3 id="sb-setup">Step 1 — Create your Supabase project</h3>
+<div class="cl">
+  <div class="cl-t">Supabase setup checklist</div>
+  <div class="cl-i"><div class="cb"></div>supabase.com → New project. Note project reference (e.g. "abcxyz123")</div>
+  <div class="cl-i"><div class="cb"></div>Settings → API → copy: Project URL, anon key, service_role key, JWT Secret</div>
+  <div class="cl-i"><div class="cb"></div>Settings → Database → Connection pooling → Transaction mode → DATABASE_URL</div>
+  <div class="cl-i"><div class="cb"></div>Settings → Database → Direct connection → DATABASE_DIRECT_URL (Alembic only)</div>
+  <div class="cl-i"><div class="cb"></div>Storage → New bucket: <code>forge-projects</code> (private)</div>
+  <div class="cl-i"><div class="cb"></div>Storage → New bucket: <code>forge-snapshots</code> (private)</div>
+  <div class="cl-i"><div class="cb"></div>Storage → New bucket: <code>forge-screenshots</code> (public)</div>
+</div>
+<div class="bw"><strong>DATABASE_URL format is critical.</strong> Prepend <code>postgresql+asyncpg://</code> and use <code>?ssl=true</code> (not <code>?sslmode=require</code>). Split primary and direct URLs. Alembic MUST use DATABASE_DIRECT_URL — the transaction-mode pooler breaks DDL.</div>
+
+<h3 id="ig-setup">Step 2 — Create your Inngest account</h3>
+<div class="bi"><strong>Inngest replaces Trigger.dev entirely.</strong> It is event-driven: your app sends events, Inngest executes the corresponding functions durably with automatic retries. A local dev server lets you test everything before deploying.</div>
+<div class="cl">
+  <div class="cl-t">Inngest setup checklist</div>
+  <div class="cl-i"><div class="cb"></div>Create account at inngest.com</div>
+  <div class="cl-i"><div class="cb"></div>Create an app named "forge"</div>
+  <div class="cl-i"><div class="cb"></div>Settings → Event keys → copy Event Key → INNGEST_EVENT_KEY</div>
+  <div class="cl-i"><div class="cb"></div>Settings → Signing keys → copy Signing Key → INNGEST_SIGNING_KEY</div>
+  <div class="cl-i"><div class="cb"></div>For local dev: use <code>INNGEST_EVENT_KEY=local-dev</code> and <code>INNGEST_SIGNING_KEY=signkey-dev-000000000</code></div>
+  <div class="cl-i"><div class="cb"></div>Install Inngest CLI: <code>npm install -g inngest-cli</code> (used for local dev server)</div>
+</div>
+<div class="bi"><strong>Local dev workflow:</strong> When running locally, start a third terminal with <code>npx inngest-cli@latest dev -u http://localhost:8000/api/inngest</code>. This starts a dev UI at <code>localhost:8288</code> where you can trigger events manually and watch functions execute in real time.</div>
+
+<h3 id="cp-setup">Step 3 — Configure GitHub Copilot in VS Code</h3>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Install extensions</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> code --install-extension GitHub.copilot
+<span class="pr">$</span> code --install-extension GitHub.copilot-chat</code></pre></div>
+</div>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Select model before every session</span></div>
+  <div class="bb">
+    <div class="sr"><span class="sk">Open chat</span><span class="sv">Ctrl+Shift+I (⌘+Shift+I)</span></div>
+    <div class="sr"><span class="sk">Click model picker</span><span class="sv">Top of chat panel</span></div>
+    <div class="sr"><span class="sk">Backend/pipeline sessions</span><span class="sv">Claude Opus 4.6 (High)</span></div>
+    <div class="sr"><span class="sk">Frontend sessions</span><span class="sv">Claude Sonnet 4.6 (High)</span></div>
+    <div class="sr"><span class="sk">Mode</span><span class="sv">Agent — not Ask or Edit</span></div>
+  </div>
+</div>
+
+<h3 id="proj-setup">Step 4 — Scaffold the project</h3>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Create FORGE monorepo</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> mkdir ~/forge && cd ~/forge
+<span class="pr">$</span> git init
+<span class="pr">$</span> mkdir -p backend frontend workers/preview-proxy .github .agent/rules
+<span class="pr">$</span> printf '.env.local\n.env\n__pycache__/\n*.pyc\nnode_modules/\ndist/\n' > .gitignore
+<span class="pr">$</span> git add . && git commit -m "Initial FORGE monorepo"
+<span class="pr">$</span> code .</code></pre></div>
+</div>
+
+<h3 id="ctx-files">Step 5 — Create context files</h3>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Create .github/copilot-instructions.md — auto-injected every session</span></div>
+  <div class="bb"><p class="inst">Create ~/forge/.github/copilot-instructions.md:</p>
+<pre><code># FORGE — Copilot Standing Instructions
+
+Before starting ANY task, read AGENTS.md in full.
+For ALL frontend tasks, also read DESIGN_BRIEF.md in full.
+
+## Architecture rules — never violate
+1.  DB reads  → get_read_session() only
+2.  DB writes → get_write_session() only
+3.  Alembic migrations MUST use DATABASE_DIRECT_URL (not DATABASE_URL — pooler breaks DDL)
+4.  JWT validation: HS256 using SUPABASE_JWT_SECRET — local decode, no network call
+5.  User API keys: AES-256-GCM encrypted; key_iv and key_tag stored as LargeBinary
+6.  Build agents: temperature=0, seed=42 (deterministic)
+7.  File coherence engine: ReviewAgent ONLY — never in individual build agents 1-9
+8.  Supabase Storage: use supabase-py SDK — never boto3, never R2, never amazonaws.com
+9.  Inngest: event-driven jobs — send events via forge_inngest.send(), never call functions directly
+10. Secrets: always from settings.SETTING_NAME — never hardcode
+11. TypeScript: strict mode, zero 'any' types
+12. Every page background: #04040a — if white, index.css Google Fonts import is not line 1
+13. Northflank is compute only — all data lives in Supabase
+
+## After every backend change
+cd backend && pytest tests/ -v — fix every failure before reporting done
+
+## After every frontend change
+cd frontend && npm run typecheck — zero errors required</code></pre></div>
+</div>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Create AGENTS.md at project root</span></div>
+  <div class="bb"><p class="inst">Create ~/forge/AGENTS.md:</p>
+<pre><code># FORGE — Master Agent Context
+
+## What This Project Is
+FORGE is an AI-native full-stack application development platform.
+Users arrive with an idea and leave with a live production application.
+Guarantee: zero broken first builds through a 10-layer reliability system.
+
+## Technology Stack
+
+### Backend
+- Python 3.12, FastAPI (fully async)
+- Supabase PostgreSQL — application database (managed, PgBouncer pooler built in)
+- Supabase Auth — JWT/HS256, OAuth flows, email-password, magic links
+- Supabase Storage — all files: generated apps, build snapshots, screenshots
+- SQLAlchemy 2.0 async + Alembic (always DATABASE_DIRECT_URL for migrations)
+- supabase-py — SDK for auth admin operations and storage
+- Inngest — durable event-driven background functions (replaces Trigger.dev)
+  Served at: POST /api/inngest (mounted in main.py via inngest.fast_api.serve)
+  Client: forge_inngest in backend/app/inngest_client.py
+  Events use prefix: forge/ (e.g. forge/pipeline.run)
+- Upstash Redis — caching, pub/sub, job queue
+- Pinecone — semantic build cache + build memory
+- LangGraph — multi-agent pipeline orchestration
+- OpenTelemetry + Sentry + Prometheus
+
+### Frontend
+- React 18, Vite 5, TypeScript 5.4 strict, React Router v6
+- @supabase/supabase-js — auth token management
+- Zustand — all shared client state
+- TanStack Query v5 — all server data fetching
+- Monaco Editor, Tailwind CSS v3, Framer Motion
+- React Hook Form + Zod, Cloudflare Pages
+
+### Infrastructure
+- Northflank — FastAPI backend containers (microVM) + Firecracker sandbox VMs (pre-warmed pool 20+)
+  Northflank is compute ONLY. No database, auth, or storage.
+- Cloudflare Workers — *.preview.forge.dev reverse proxy
+- Cloudflare Durable Objects — HMR WebSocket relay
+- Cloudflare KV — sandbox URL registry
+
+## Services NOT in this stack — never reference these
+- Trigger.dev — replaced by Inngest
+- Nhost — replaced by Supabase
+- Cloudflare R2 — replaced by Supabase Storage
+- boto3 / botocore — replaced by supabase-py
+- Fly.io — not used
+- AWS S3 / amazonaws.com — not used
+
+## Architecture Rules
+1.  DB reads: get_read_session() only
+2.  DB writes: get_write_session() only
+3.  Alembic: DATABASE_DIRECT_URL only (pooler breaks DDL)
+4.  JWT: HS256 + SUPABASE_JWT_SECRET, audience="authenticated"
+5.  API keys: AES-256-GCM; key_iv, key_tag as LargeBinary
+6.  Build agents: temperature=0, seed=42
+7.  File coherence: ReviewAgent ONLY
+8.  Storage: supabase-py — never boto3 or R2
+9.  Inngest: send events via forge_inngest.send() — never import functions directly
+10. Never hardcode secrets
+11. TypeScript strict, zero any
+12. Preview: file save → browser update < 700ms
+13. Northflank: compute only
+
+## Build Status
+Phase: 1 — Foundation
+Completed: none
+Next: Session 1.1 — Backend core</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit context files</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Add AGENTS.md and Copilot instructions (Supabase + Inngest stack)"</code></pre></div>
+</div>
+
+<h3 id="env-vars">Step 6 — Environment variables</h3>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Create ~/forge/.env.local</span></div>
+  <div class="bb"><p class="inst">Get Supabase values from Settings → API. Get Inngest values from your Inngest dashboard.</p>
+<pre><code># ── App ──────────────────────────────────────────────────────────
+FORGE_ENV=development
+FORGE_SECRET_KEY=                 # openssl rand -hex 32
+FORGE_ENCRYPTION_KEY=             # openssl rand -hex 32
+FORGE_HMAC_SECRET=                # openssl rand -hex 32
+
+# ── Supabase ── Settings → API ────────────────────────────────────
+SUPABASE_URL=https://your-ref.supabase.co
+SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+SUPABASE_JWT_SECRET=              # Settings → API → JWT Secret
+
+# ── Database ─────────────────────────────────────────────────────
+# Pooler (transaction mode) — for all runtime queries
+DATABASE_URL=postgresql+asyncpg://postgres.ref:pass@aws-0-region.pooler.supabase.com:6543/postgres
+# Direct — Alembic migrations ONLY (pooler breaks DDL)
+DATABASE_DIRECT_URL=postgresql+asyncpg://postgres:pass@db.ref.supabase.co:5432/postgres
+# Read replica (Pro plan) — use same as DATABASE_URL if on free plan
+DATABASE_READ_URL=postgresql+asyncpg://postgres.ref:pass@aws-0-region.pooler.supabase.com:6543/postgres
+
+# ── Supabase Storage buckets ──────────────────────────────────────
+SUPABASE_BUCKET_PROJECTS=forge-projects
+SUPABASE_BUCKET_SNAPSHOTS=forge-snapshots
+SUPABASE_BUCKET_SCREENSHOTS=forge-screenshots
+
+# ── Inngest ── dashboard.inngest.com ──────────────────────────────
+INNGEST_EVENT_KEY=                # Event keys → copy key (use "local-dev" for local)
+INNGEST_SIGNING_KEY=              # Signing keys → copy key (use "signkey-dev-000000000" for local)
+INNGEST_BASE_URL=                 # Leave blank for cloud; http://localhost:8288 for local dev
+
+# ── Northflank — compute only ─────────────────────────────────────
+NORTHFLANK_API_KEY=
+NORTHFLANK_PROJECT_ID=
+
+# ── Redis (Upstash) ───────────────────────────────────────────────
+REDIS_URL=rediss://default:pass@your.upstash.io:6380
+
+# ── Cloudflare ────────────────────────────────────────────────────
+CLOUDFLARE_KV_NAMESPACE_ID=
+PREVIEW_DOMAIN=preview.forge.dev
+
+# ── Pinecone ──────────────────────────────────────────────────────
+PINECONE_API_KEY=
+
+# ── AI Providers ──────────────────────────────────────────────────
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+GOOGLE_AI_API_KEY=
+
+# ── Monitoring ────────────────────────────────────────────────────
+SENTRY_DSN=
+
+# ── Frontend (Vite prefix required) ──────────────────────────────
+VITE_SUPABASE_URL=https://your-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...
+VITE_API_BASE_URL=http://localhost:8000
+VITE_TURNSTILE_SITE_KEY=</code></pre></div>
+</div>
+
+<h3 id="session-pat">Step 7 — The session pattern</h3>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Follow this every time</span></div>
+  <div class="bb">
+    <div class="sr"><span class="sk">1 — Open chat</span><span class="sv">Ctrl+Shift+I</span></div>
+    <div class="sr"><span class="sk">2 — Confirm model</span><span class="sv">Opus 4.6 High (backend) · Sonnet 4.6 High (frontend)</span></div>
+    <div class="sr"><span class="sk">3 — Confirm mode</span><span class="sv">Agent — not Ask or Edit</span></div>
+    <div class="sr"><span class="sk">4 — Paste prompt</span><span class="sv">Copy from this guide, paste, press Enter</span></div>
+    <div class="sr"><span class="sk">5 — Token limit</span><span class="sv">If generation stops mid-file, type "continue"</span></div>
+    <div class="sr"><span class="sk">6 — Self-review</span><span class="sv">Paste gold block in the same conversation after it finishes</span></div>
+    <div class="sr"><span class="sk">7 — Commit</span><span class="sv">Run the green terminal commit command</span></div>
+  </div>
+</div>
+<!-- ═══ PHASE 1 ═══ -->
+<div class="ph" id="p1">
+  <div class="ph-b">Phase 1 · Sessions 1.1–1.9</div>
+  <div class="ph-t">Foundation</div>
+  <div class="ph-d">FastAPI backend with Inngest endpoint, Supabase database + auth + storage, all 22 frontend pages, Monaco editor.</div>
+</div>
+
+<!-- 1.1 -->
+<div class="sc" id="s11">
+<div class="sc-h"><span class="sc-n">1.1</span><div><div class="sc-t">Backend core — FastAPI, Supabase, Inngest client, middleware</div><div class="sc-d">config.py · database.py · inngest_client.py · auth middleware (HS256) · main.py with /api/inngest endpoint</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first.
+
+Set up the complete FastAPI backend for FORGE.
+
+backend/requirements.txt — pin all versions:
+  fastapi, uvicorn[standard], gunicorn, pydantic[email]>=2.0,
+  pydantic-settings, sqlalchemy>=2.0, asyncpg, alembic,
+  redis[hiredis], python-jose[cryptography], passlib[bcrypt],
+  python-multipart, httpx, structlog, sentry-sdk,
+  opentelemetry-sdk, prometheus-client, langchain, langgraph,
+  anthropic, openai, supabase>=2.4.0, inngest,
+  pytest, pytest-asyncio, anyio, faker
+
+backend/app/config.py — pydantic-settings BaseSettings:
+  env_file=["../.env.local", ".env"], extra="ignore"
+  Fields:
+    FORGE_ENV, FORGE_SECRET_KEY, FORGE_ENCRYPTION_KEY, FORGE_HMAC_SECRET
+    SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET
+    DATABASE_URL          # Supabase pooler — runtime queries
+    DATABASE_DIRECT_URL   # Supabase direct — Alembic migrations ONLY
+    DATABASE_READ_URL: str = ""
+    SUPABASE_BUCKET_PROJECTS: str = "forge-projects"
+    SUPABASE_BUCKET_SNAPSHOTS: str = "forge-snapshots"
+    SUPABASE_BUCKET_SCREENSHOTS: str = "forge-screenshots"
+    INNGEST_EVENT_KEY: str = "local-dev"
+    INNGEST_SIGNING_KEY: str = "signkey-dev-000000000"
+    INNGEST_BASE_URL: str = ""  # blank for cloud, http://localhost:8288 for local dev
+    NORTHFLANK_API_KEY, NORTHFLANK_PROJECT_ID
+    REDIS_URL
+    CLOUDFLARE_KV_NAMESPACE_ID, PREVIEW_DOMAIN: str = "preview.forge.dev"
+    PINECONE_API_KEY
+    ANTHROPIC_API_KEY: str = "", OPENAI_API_KEY: str = "", GOOGLE_AI_API_KEY: str = ""
+    SENTRY_DSN: str = ""
+
+  @property
+  def effective_read_url(self) -> str:
+      return self.DATABASE_READ_URL or self.DATABASE_URL
+
+backend/app/core/database.py — async SQLAlchemy R/W split:
+  engine_write → settings.DATABASE_URL (Supabase pooler, primary)
+  engine_read  → settings.effective_read_url
+  Both: pool_size=5, max_overflow=10, pool_pre_ping=True
+  get_write_session() — async context manager, INSERT/UPDATE/DELETE only
+  get_read_session()  — async context manager, SELECT only
+
+backend/app/core/security.py — AES-256-GCM:
+  encrypt_api_key(plaintext) -> tuple[bytes, bytes, bytes]  (ciphertext, iv, tag)
+  decrypt_api_key(ciphertext, iv, tag) -> str
+  Random 12-byte IV per call.
+
+backend/app/core/redis.py — Upstash async Redis client
+
+backend/app/inngest_client.py — Inngest client singleton:
+  import inngest
+  from app.config import settings
+
+  forge_inngest = inngest.Inngest(
+      app_id="forge",
+      event_key=settings.INNGEST_EVENT_KEY,
+      signing_key=settings.INNGEST_SIGNING_KEY,
+      is_production=(settings.FORGE_ENV == "production"),
+  )
+
+backend/app/middleware/auth.py — Supabase JWT local validation (NO network call):
+  from jose import jwt, JWTError
+  Decode with SUPABASE_JWT_SECRET, algorithm HS256, audience "authenticated"
+  On success: request.state.user_id = UUID(payload["sub"])
+  On failure: raise HTTPException(401)
+  Skip for: /health, /api/inngest, /api/v1/auth/login, /api/v1/auth/register,
+    /api/v1/auth/refresh, /api/v1/auth/forgot-password, /api/v1/auth/reset-password
+
+  NOTE: /api/inngest must be in the skip list — Inngest validates via its own
+  signing key, not our Supabase JWT.
+
+backend/app/middleware/rate_limit.py — Redis sliding window:
+  100 req/min standard · 10 req/min for /pipeline/* and /ai/* routes
+  Return 429 with Retry-After
+
+backend/app/middleware/request_id.py — inject X-Request-ID
+backend/app/middleware/logging.py — structlog with user_id + request_id
+
+backend/app/main.py:
+  Register middleware in EXACT order:
+    1. request_id  2. logging  3. cors (allow http://localhost:5173)
+    4. rate_limit  5. auth
+  GET /health → {"status": "ok", "env": settings.FORGE_ENV}
+  Mount all API routers.
+
+  INNGEST ENDPOINT — add after all other routers:
+    from inngest.fast_api import serve as inngest_serve
+    from app.inngest_client import forge_inngest
+    # Functions imported in Session 4.1 — placeholder list for now
+    app.include_router(
+        inngest_serve(forge_inngest, functions=[]),
+        prefix="/api",
+    )
+    # This exposes POST /api/inngest for Inngest cloud to call
+
+After:
+  pip install -r requirements.txt --break-system-packages
+  uvicorn app.main:app --reload
+  curl http://localhost:8000/health → {"status":"ok"}
+  curl http://localhost:8000/api/inngest → must NOT return 404
+    (Returns Inngest introspection JSON even with empty functions list)</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>Review Session 1.1.
+
+1. grep -n "engine_write\|engine_read\|get_write_session\|get_read_session" backend/app/core/database.py
+   All four must appear.
+
+2. Does backend/app/inngest_client.py exist with forge_inngest instance?
+   grep -n "forge_inngest\|inngest.Inngest" backend/app/inngest_client.py
+
+3. Is /api/inngest in the auth middleware skip list?
+   grep -n "api/inngest" backend/app/middleware/auth.py
+   Must appear — Inngest cannot send signed requests if we block them.
+
+4. Is inngest_serve mounted in main.py at prefix="/api"?
+   grep -n "inngest_serve\|/api/inngest" backend/app/main.py
+
+5. grep -rn "boto3\|botocore\|amazonaws\|trigger" backend/app/ --include="*.py"
+   Must return zero results.
+
+6. Middleware order: request_id → logging → cors → rate_limit → auth?
+
+7. curl http://localhost:8000/health → {"status":"ok"}
+   curl http://localhost:8000/api/inngest → returns JSON (not 404)
+
+List every issue and confirm fixed.</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 1.1</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 1.1: FastAPI, Supabase, Inngest client, HS256 auth"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 1.2 -->
+<div class="sc" id="s12">
+<div class="sc-h"><span class="sc-n">1.2</span><div><div class="sc-t">Database models — all 18 tables</div><div class="sc-d">SQLAlchemy 2.0 async · UUID PKs · indexes · Alembic migration via DATABASE_DIRECT_URL</div></div></div>
+<div class="sc-b">
+<div class="bw"><strong>alembic/env.py must use DATABASE_DIRECT_URL.</strong> The transaction-mode pooler does not support DDL. If it points at DATABASE_URL, every migration fails.</div>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first.
+
+Create all 18 SQLAlchemy 2.0 async models in backend/app/models/.
+Rules for every model: UUID PK, created_at + updated_at with server defaults,
+ON DELETE CASCADE on all FKs, index on every FK column, composite index (user_id, status).
+
+user.py: id(UUID PK), email(unique), display_name, avatar_url, onboarded(bool,false),
+  plan(str,"free"), token_limit(int,10000)
+
+ai_provider.py: id, user_id(FK→users), provider_name(Enum: anthropic,openai,gemini,
+  grok,mistral,cohere,deepseek,together), encrypted_key(LargeBinary), key_iv(LargeBinary),
+  key_tag(LargeBinary), is_default(bool,false), is_connected(bool,false), latency_ms(int,null)
+  UNIQUE INDEX (user_id, provider_name)
+  CRITICAL: encrypted_key, key_iv, key_tag are LargeBinary — never return in API responses
+
+project.py: id, user_id(FK), name, description, status(Enum: draft,building,live,error,archived),
+  framework(Enum: nextjs,vite_react,fastapi,django,express)
+  INDEX: (user_id, status, updated_at DESC)
+
+pipeline_run.py: id, project_id(FK), user_id, status(Enum: pending,running,completed,failed),
+  current_stage(int,1), idea_spec(JSONB), errors(JSONB,null)
+
+agent_output.py: id, pipeline_run_id(FK), agent_name, stage(int), output_data(JSONB),
+  gate_passed(bool,null), duration_ms(int,null)
+
+build.py: id, project_id(FK), user_id, pipeline_run_id(FK,null), status(Enum: pending,building,
+  success,failed), gate_results(JSONB,null), generated_files_key(str,null)
+  INDEX: (project_id, status)
+
+sandbox.py: id, project_id(FK,null), status(Enum: warm,claimed,building,stopping,stopped,error),
+  northflank_service_id(str,null)
+  INDEX: (status) — pool claim query performance
+
+editor_session.py: id, project_id(FK), user_id, sandbox_id(FK,null), last_active_at
+chat_message.py: id, project_id(FK), user_id, session_id(FK→editor_sessions),
+  role(Enum: user,assistant), content(Text), model_used(str,null)
+deployment.py: id, project_id(FK), user_id, build_id(FK), status(str), url(str,null)
+idea_session.py: id, user_id, questionnaire_answers(JSONB,null), completed(bool,false)
+idea.py: id, idea_session_id(FK), user_id, title, description(Text), tech_stack(JSONB),
+  market_analysis(JSONB,null), saved(bool,false)
+annotation.py: id, project_id(FK), user_id, editor_session_id(FK,null),
+  css_selector, route, comment(Text), x_pct(Float), y_pct(Float), resolved(bool,false)
+build_snapshot.py: id, build_id(FK), project_id(FK), agent_number(int), agent_type(str),
+  screenshot_url, storage_key
+preview_share.py: id, sandbox_id(FK), user_id, token(str,unique), expires_at, revoked(bool,false)
+hot_fix_record.py: id, build_id(FK), failed_gate, failing_file, fix_applied(Text,null),
+  success(bool), attempts(int,1)
+performance_report.py: id, build_id(FK), route, lcp_ms(Float,null), cls(Float,null),
+  fid_ms(Float,null), bundle_kb(Float,null), passed(bool)
+accessibility_report.py: id, build_id(FK), route, critical_count(int,0), serious_count(int,0),
+  violations(JSONB), passed(bool)
+coherence_report.py: id, build_id(FK), critical_errors(int,0), auto_fixes(int,0),
+  report_data(JSONB), passed(bool)
+
+After all models:
+1. backend/app/models/__init__.py — import all 18
+2. alembic/env.py — CRITICAL: use DATABASE_DIRECT_URL:
+   from app.config import settings
+   config.set_main_option("sqlalchemy.url", settings.DATABASE_DIRECT_URL)
+   target_metadata = Base.metadata
+3. alembic revision --autogenerate -m "initial schema"
+4. alembic upgrade head
+5. SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;
+   Must list 18 tables.</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. python -c "from app.models import *; print('All 18 models OK')"
+2. Count tables in Supabase: SELECT count(*) FROM pg_tables WHERE schemaname='public'; — must be 18
+3. grep "DATABASE_DIRECT_URL" alembic/env.py — must use DIRECT_URL not DATABASE_URL
+4. ai_provider: encrypted_key, key_iv, key_tag are LargeBinary type?
+5. sandbox.py has INDEX on status column (needed for pool claim query)?
+6. List every issue and confirm fixed.</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 1.2</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 1.2: All 18 models, Alembic migration to Supabase"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 1.3 -->
+<div class="sc" id="s13">
+<div class="sc-h"><span class="sc-n">1.3</span><div><div class="sc-t">Authentication API — 7 endpoints</div><div class="sc-d">Supabase Auth REST · register MUST write User row to Supabase PostgreSQL · login safety net</div></div></div>
+<div class="sc-b">
+<div class="bw"><strong>Two-step pattern on every register AND login.</strong> Supabase Auth stores the identity. Your <code>public.users</code> table stores application data. The Supabase user UUID is used as our User.id. If <code>register_user()</code> skips the <code>get_write_session()</code> call, <code>get_current_user()</code> always returns None.</div>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first.
+
+Build the auth service and API using Supabase Auth.
+
+backend/app/services/auth_service.py:
+
+  Auth REST base: {SUPABASE_URL}/auth/v1
+
+  Admin headers: {"apikey": SERVICE_ROLE_KEY, "Authorization": "Bearer {SERVICE_ROLE_KEY}"}
+  Anon headers: {"apikey": ANON_KEY, "Content-Type": "application/json"}
+
+  class SupabaseAuthError(Exception):
+    def __init__(self, status_code: int, detail: str)
+
+  async def register_user(email, password, display_name) -> dict:
+    Step 1: POST /auth/v1/signup with admin headers
+      body: {"email", "password", "data": {"display_name": display_name}}
+    Raise SupabaseAuthError if status >= 400
+    Step 2: Write User row via get_write_session():
+      User(id=UUID(response["user"]["id"]), email=email,
+           display_name=display_name, onboarded=False, plan="free")
+      Duplicate guard: check existing before insert.
+    Return response dict.
+
+  async def get_or_create_user_on_login(supabase_uid, email, display_name) -> User:
+    Idempotent: check if User row exists, create if not. Uses get_write_session().
+
+  async def login_user(email, password) -> dict:
+    POST /auth/v1/token?grant_type=password with anon headers
+    Raise SupabaseAuthError if status >= 400
+    Call get_or_create_user_on_login() with returned user data.
+    Return response dict (contains access_token, refresh_token, user).
+
+  async def refresh_tokens(refresh_token) -> dict:
+    POST /auth/v1/token?grant_type=refresh_token
+
+  async def get_current_user(user_id: UUID, session: AsyncSession) -> User | None:
+    SELECT from public.users WHERE id=user_id via caller-supplied read session.
+
+  async def logout_user(access_token) -> None:
+    POST /auth/v1/logout, ignore 401 (already logged out).
+
+  async def forgot_password(email) -> None:
+    POST /auth/v1/recover. Swallow ALL 4xx (prevent email enumeration). Raise on 5xx only.
+
+  async def reset_password(token, new_password) -> None:
+    PUT /auth/v1/user with Bearer token.
+
+backend/app/api/v1/auth.py — 7 endpoints:
+  POST /api/v1/auth/register   — validate Turnstile, call register_user
+  POST /api/v1/auth/login      — return {user, access_token, refresh_token}
+  POST /api/v1/auth/logout     — requires auth
+  POST /api/v1/auth/refresh    — body: {refresh_token}
+  GET  /api/v1/auth/me         — requires auth, get_current_user via get_read_session()
+  POST /api/v1/auth/forgot-password
+  POST /api/v1/auth/reset-password
+
+backend/tests/test_auth.py:
+  Mock httpx.AsyncClient for Supabase calls. Mock get_write_session and get_read_session.
+  test_register_success, test_register_duplicate, test_login_success,
+  test_login_wrong_password, test_refresh_tokens, test_logout,
+  test_me_authenticated, test_me_unauthenticated (→ 401), test_forgot_password (→ 200)
+
+pytest tests/test_auth.py -v — fix all failures</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. grep -n "get_write_session" backend/app/services/auth_service.py
+   Must appear in BOTH register_user AND get_or_create_user_on_login.
+2. get_or_create_user_on_login called inside login_user?
+3. forgot_password swallows 4xx, raises only on 5xx?
+4. Auth endpoints use /auth/v1/* paths (Supabase, not Nhost /v1/* paths)?
+5. pytest tests/test_auth.py -v — all pass?
+6. curl localhost:8000/api/v1/auth/me → 401</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 1.3</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 1.3: Auth API — Supabase Auth, 7 endpoints, tests"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 1.4 -->
+<div class="sc" id="s14">
+<div class="sc-h"><span class="sc-n">1.4</span><div><div class="sc-t">Projects API + Supabase Storage</div><div class="sc-d">CRUD with ownership · sanitize_path · supabase-py SDK (never boto3)</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first.
+
+backend/app/services/storage_service.py:
+  Uses supabase-py — NOT boto3, NOT R2, NOT amazonaws.com.
+  Service role key bypasses RLS.
+
+  from supabase import create_client
+  _client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+
+  async def upload_file(bucket, path, content: bytes, content_type="application/octet-stream") -> str:
+    _client.storage.from_(bucket).upload(
+        path, content, file_options={"content-type": content_type, "upsert": "true"})
+    return f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}"
+
+  async def download_file(bucket, path) -> bytes:
+    return _client.storage.from_(bucket).download(path)
+
+  async def delete_file(bucket, path) -> None:
+    _client.storage.from_(bucket).remove([path])
+
+  async def list_files(bucket, prefix="") -> list[str]:
+    return [f["name"] for f in _client.storage.from_(bucket).list(prefix) if f.get("name")]
+
+  async def signed_url(bucket, path, expires_in=3600) -> str:
+    return _client.storage.from_(bucket).create_signed_url(path, expires_in)["signedURL"]
+
+backend/app/core/sanitize.py:
+  def sanitize_path(path: str) -> str:
+    Raise HTTP 400 if path contains ../ or starts with /
+    Return cleaned relative path.
+
+backend/app/services/project_service.py:
+  All reads: get_read_session(). All writes: get_write_session().
+  OWNERSHIP: every query WHERE id=X AND user_id=Y — never fetch by id alone.
+  File ops: sanitize_path(path) before every storage key construction.
+
+backend/app/api/v1/projects.py — routes (all require auth + ownership):
+  GET/POST /api/v1/projects
+  GET/PUT/DELETE /api/v1/projects/{id}
+  GET/PUT/DELETE /api/v1/projects/{id}/files  (content?path=, ?path=)
+  POST /api/v1/projects/{id}/files/rename
+
+tests/test_projects.py:
+  test_get_project_wrong_owner → 404 (critical security test)
+  test_path_traversal → "../../etc/passwd" returns 400
+
+pytest tests/test_projects.py -v</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. grep -n "boto3\|botocore\|amazonaws" backend/app/services/storage_service.py
+   Must return zero results.
+2. grep -n "create_client\|from supabase" backend/app/services/storage_service.py
+   Must show supabase-py usage.
+3. Every project route uses WHERE id AND user_id together?
+4. sanitize_path blocks "../../etc/passwd" → 400?
+5. pytest tests/test_projects.py -v — all pass? test_get_project_wrong_owner passes?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 1.4</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 1.4: Projects API + Supabase Storage (supabase-py)"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 1.5 -->
+<div class="sc" id="s15">
+<div class="sc-h"><span class="sc-n">1.5</span><div><div class="sc-t">React + Vite frontend setup + FORGE design system</div><div class="sc-d">@supabase/supabase-js · TypeScript strict · Tailwind tokens · Google Fonts MUST be first line of index.css</div></div></div>
+<div class="sc-b">
+<div class="bw"><strong>Google Fonts @import MUST be line 1 of index.css.</strong> Not line 2, not after a comment. If it is not first, iOS Safari renders white backgrounds on every page.</div>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Sonnet 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md and DESIGN_BRIEF.md first.
+
+cd frontend
+npm create vite@latest . -- --template react-ts && npm install
+npm install react-router-dom@6 @tanstack/react-query@5 zustand
+npm install @supabase/supabase-js @monaco-editor/react
+npm install framer-motion react-hook-form @hookform/resolvers zod
+npm install axios tailwindcss@3 @tailwindcss/forms
+npm install -D @types/node vitest @testing-library/react
+npx tailwindcss init -p
+
+frontend/vite.config.ts: proxy /api/* → http://localhost:8000, alias @ → src/
+frontend/tsconfig.json: strict:true, paths:{"@/*":["./src/*"]}
+
+frontend/tailwind.config.ts — extend theme:
+  colors: void:#04040a, surface:#080812, panel:#0d0d1f, card:#111125,
+    forge:#63d9ff, ember:#ff6b35, gold:#f5c842, jade:#3dffa0, violet:#b06bff
+  fontFamily: syne:["Syne","sans-serif"], mono:["JetBrains Mono","monospace"]
+
+frontend/src/index.css — FIRST LINE MUST BE:
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&family=Instrument+Serif:ital@0;1&display=swap');
+
+  Then CSS custom properties in :root (--void, --forge, --ember, --gold, --jade, --violet, etc.)
+  Global: html,body,#root { background:#04040a; color:#e8e8f0; font-family:'Syne',sans-serif; }
+  Utility: .grid-bg with 60px grid at rgba(99,217,255,0.022)
+  Keyframes: pulse-f, jade-pulse, fade-in, spin
+  Component classes: .card, .card.fa/.ea/.ja/.va, .btn variants, .input, .tag variants
+
+frontend/src/api/supabase.ts:
+  import { createClient } from '@supabase/supabase-js'
+  export const supabase = createClient(
+    import.meta.env.VITE_SUPABASE_URL,
+    import.meta.env.VITE_SUPABASE_ANON_KEY
+  )
+
+frontend/src/api/client.ts — Axios instance:
+  baseURL: VITE_API_BASE_URL + '/api/v1'
+  Request: add Authorization Bearer from localStorage
+  Response: 401 → refresh → fail → clear + redirect /login
+
+frontend/src/types/index.ts — TypeScript interfaces matching backend models.
+frontend/src/main.tsx — QueryClientProvider + BrowserRouter wrapping App.
+
+After: npm run typecheck → zero errors, npm run dev → localhost:5173 background #04040a</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. head -1 frontend/src/index.css — must be @import url('https://fonts.googleapis.com...')
+2. localhost:5173 background is #04040a (dark, NOT white)?
+3. @supabase/supabase-js installed? cat frontend/package.json | grep supabase
+4. frontend/src/api/supabase.ts uses VITE_SUPABASE_URL?
+5. npm run typecheck — zero errors?
+6. npm run build — succeeds?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 1.5</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 1.5: React + Vite, design system, Supabase JS client"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 1.6 -->
+<div class="sc" id="s16">
+<div class="sc-h"><span class="sc-n">1.6</span><div><div class="sc-t">React Router + AppShell + Zustand auth store</div><div class="sc-d">All 22 routes · ProtectedRoute · TopNav 62px · Sidebar 220px</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Sonnet 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md and DESIGN_BRIEF.md first. Build React Router and AppShell.
+Pages are placeholders — content built in 1.7.
+
+frontend/src/stores/authStore.ts — Zustand:
+  State: user, isLoading, isAuthenticated
+  initialize(): GET /api/v1/auth/me → set user or clear localStorage
+  login(user, tokens): store tokens, set user
+  logout(): clear, reset, redirect /login
+
+All 22 routes (React.lazy + Suspense):
+  Public: / /login /register /forgot-password /reset-password
+  Protected (ProtectedRoute):
+    /onboarding /dashboard /projects /projects/new
+    /projects/:id /projects/:id/editor (NO AppShell — full viewport)
+    /projects/:id/builds /projects/:id/deployments /projects/:id/settings
+    /ideate /ideate/questionnaire/:id /ideate/ideas/:id /pipeline/:id
+    /settings/profile /settings/ai-providers /settings/model-routing
+    /settings/integrations /settings/api-keys /settings/security /settings/billing
+
+ProtectedRoute: isLoading → spinner, authenticated → Outlet in AppShell,
+  not authenticated → navigate("/login?redirect="+path)
+  EditorPage: render WITHOUT AppShell
+
+TopNav: height exactly 62px
+Sidebar: width exactly 220px, active item: forge color + 2px forge border-left
+
+After: npm run typecheck → zero errors
+/dashboard without auth → redirects to /login ✓</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. All 22 routes defined? List them.
+2. /dashboard without auth → redirects to /login with ?redirect param?
+3. EditorPage has NO AppShell wrapper?
+4. npm run typecheck — zero errors?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 1.6</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 1.6: Router (22 routes), AppShell, auth guard"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 1.7 -->
+<div class="sc" id="s17">
+<div class="sc-h"><span class="sc-n">1.7</span><div><div class="sc-t">All 22 pages — fully built</div><div class="sc-d">Every page matching DESIGN_BRIEF.md · Largest session · type "continue" if it stops mid-file</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Sonnet 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md and DESIGN_BRIEF.md in full before writing any code.
+DESIGN_BRIEF.md is the primary UI specification. Implement every page exactly as described.
+
+Build all 22 pages:
+
+LandingPage (/): bg:#04040a + .grid-bg + 3 absolute blur orbs
+  Hero: clamp(48px,6.5vw,86px) bold, "Ship" in Instrument Serif Italic #63d9ff, "everything." #ff6b35
+  Stat numbers: gradient cyan→jade background-clip:text
+  3 path cards: .card.fa, .card.va, .card.ea
+
+LoginPage + RegisterPage: 440px/480px centered card, React Hook Form + Zod,
+  password strength meter (4 segments) on register
+
+OnboardingPage: 3-step pills, selectable cards (forge border on active)
+
+DashboardPage: 4 gradient stat cards, recent projects, quick actions
+
+ProjectsPage: filter tabs, 3-column grid, search, empty state
+
+NewProjectPage: 2-path choice, textarea 2000-char, AI Enhancement toggle,
+  cloud chips (Supabase, Stripe, OpenAI, Resend, Twilio), framework selector
+
+IdeationPage: 3 large option cards
+
+QuestionnairePage: 8 adaptive questions, progress pills, skip/back, animated transitions
+
+IdeasPage: 3+2 grid, 150ms stagger, Save + Build buttons
+
+PipelinePage: WebSocket /api/v1/pipeline/:id/stream, 6-stage list, C-Suite 2×4 grid,
+  live event log, confetti + redirect on completion, reconnect on WS disconnect
+
+EditorPage — FULL VIEWPORT, NO AppShell:
+  Grid: 46px activity bar | 210px file tree | flex:1 Monaco | 295px chat
+  Top bar: 46px, bg #080812
+  Status bar: 22px, bg EXACTLY #63d9ff, color #04040a
+  Preview pane (310px, toggled): toolbar placeholder + iframe area + timeline placeholder
+  Leave preview components as placeholder divs — built in Phase 3
+
+Settings pages (shared SettingsLayout sub-sidebar):
+  Profile, AIProviders (8 provider cards + connect modal), ModelRouting,
+  ApiKeys (create + one-time reveal modal), Security, Billing, Integrations
+
+After: npm run typecheck → zero errors, npm run lint, npm run build → succeeds
+Verify every page background is #04040a, fonts are Syne + JetBrains Mono</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>CRITICAL:
+1. LandingPage: bg #04040a? "Ship" in Instrument Serif Italic #63d9ff?
+2. EditorPage: status bar bg EXACTLY #63d9ff (DevTools → Computed → background-color)?
+   NO AppShell wrapping the editor?
+3. PipelinePage WebSocket: cleaned up in useEffect return?
+4. npm run typecheck — zero errors?
+5. npm run build — succeeds?
+List every discrepancy from DESIGN_BRIEF.md and confirm fixed.</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 1.7</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 1.7: All 22 pages matching FORGE design system"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 1.8 -->
+<div class="sc" id="s18">
+<div class="sc-h"><span class="sc-n">1.8</span><div><div class="sc-t">Monaco editor + editorStore</div><div class="sc-d">FORGE dark theme · file tree · tabs · 500ms debounce · devConsoleErrors + chatVisible in store</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Sonnet 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md and DESIGN_BRIEF.md first.
+
+frontend/src/stores/editorStore.ts — Zustand:
+  projectId, sandboxId, openFiles, activeFile, fileContents, modifiedFiles
+  previewVisible, previewDevice('mobile'|'desktop'), previewRoute
+  annotationMode, annotations, snapshots, selectedSnapshot(null=LIVE)
+  devConsoleErrors: number    ← synced FROM PreviewDevConsole, READ BY PreviewToolbar
+  chatVisible: boolean        ← toggled by DevConsole "Send to AI" button
+
+frontend/src/hooks/useEditor.ts:
+  Mount: POST /api/v1/editor/sessions, GET file tree
+  WebSocket: wss://.../editor/sessions/:id/stream — close in useEffect return
+  Auto-save: 500ms debounce → PUT /api/v1/projects/:id/files/content
+  Ctrl/Cmd+S: save immediately (bypass debounce)
+
+frontend/src/components/editor/MonacoEditor.tsx:
+  FORGE dark theme: editor.background:#04040a, keywords:#b06bff,
+  functions:#63d9ff, strings:#3dffa0, types:#f5c842,
+  comments:rgba(232,232,240,0.28) italic, operators:#ff6b35
+  Options: fontSize:12, lineHeight:1.85, wordWrap:"on"
+
+frontend/src/components/editor/FileTree.tsx:
+  Modified: ember dot (●), Active: forge color + forge-dim bg
+  Right-click: New File, Rename, Delete, Copy Path
+
+frontend/src/components/editor/EditorTabs.tsx:
+  Modified: ember ●, × close, active: 2px forge border-bottom, overflow: scrollable
+
+After: npm run typecheck → zero errors
+Monaco bg #04040a, Ctrl+S → network request visible</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. editorStore has devConsoleErrors: number AND chatVisible: boolean?
+   (Phase 3 breaks without these — critical)
+2. useEditor WebSocket closed in useEffect return?
+3. Auto-save debounce is 500ms (not 0ms)?
+4. Monaco background exactly #04040a?
+5. npm run typecheck — zero errors?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 1.8</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 1.8: Monaco editor, editorStore, auto-save"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 1.9 -->
+<div class="sc" id="s19">
+<div class="sc-h"><span class="sc-n">1.9</span><div><div class="sc-t">Phase 1 full system audit</div><div class="sc-d">Integration check before Phase 2 — do not skip</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High · Audit only — no new features</span></div>
+  <div class="bb"><p class="inst">Start both servers first. Then paste:</p>
+<pre><code>Read AGENTS.md. Audit only — fix problems, build nothing new.
+
+BACKEND:
+1. pytest tests/ -v — all must pass. Show output.
+2. curl localhost:8000/health → {"status":"ok"}
+3. Middleware order: request_id→logging→cors→rate_limit→auth?
+4. grep -r "boto3\|botocore\|amazonaws\|trigger" backend/app/ --include="*.py"
+   Zero results required.
+5. grep -n "get_write_session" backend/app/services/auth_service.py
+   Must appear in register_user AND get_or_create_user_on_login.
+6. grep -n "SUPABASE_JWT_SECRET\|HS256" backend/app/middleware/auth.py
+7. grep -n "DATABASE_DIRECT_URL" alembic/env.py
+8. Is /api/inngest in auth middleware skip list?
+   grep -n "api/inngest" backend/app/middleware/auth.py
+9. curl localhost:8000/api/inngest — must NOT return 404.
+
+FRONTEND:
+10. npm run typecheck — zero errors
+11. npm run build — succeeds
+
+INTEGRATION (both servers running):
+12. localhost:5173 → background #04040a?
+13. /dashboard → redirects to /login?
+14. curl localhost:8000/api/v1/auth/me → 401
+15. curl -X POST localhost:8000/api/v1/auth/register \
+    -H "Content-Type: application/json" -d "{}" → 422</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Mark Phase 1 complete</span></div>
+  <div class="bb"><p class="inst">Update AGENTS.md Build Status to "Phase: 2 — Intelligence". Then:</p>
+<pre><code><span class="pr">$</span> cd ~/forge && git add .
+<span class="pr">$</span> git commit -m "Phase 1 COMPLETE: Foundation — Supabase, Inngest client, 22 pages, Monaco"</code></pre></div>
+</div>
+</div></div>
+<!-- ═══ PHASE 2 ═══ -->
+<div class="ph" id="p2">
+  <div class="ph-b">Phase 2 · Sessions 2.1–2.8</div>
+  <div class="ph-t">Intelligence — The AI Pipeline</div>
+  <div class="ph-d">LangGraph, 26 agents, 10 reliability layers. Opus 4.6 High for every Phase 2 session.</div>
+</div>
+
+<!-- 2.1 -->
+<div class="sc" id="s21">
+<div class="sc-h"><span class="sc-n">2.1</span><div><div class="sc-t">LangGraph pipeline foundation</div><div class="sc-d">PipelineState · 12 gate validators · 6-stage StateGraph · WebSocket stream</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first.
+
+backend/app/agents/state.py — PipelineState TypedDict:
+  idea_spec, pipeline_id, project_id, user_id, current_stage(int 1-6),
+  csuite_outputs, comprehensive_plan, spec_outputs, build_manifest,
+  generated_files(dict[str,str]), gate_results(dict[str,dict]),
+  errors(list[str]), sandbox_id(str|None)
+
+backend/app/agents/validators.py — validate_g1 through validate_g12:
+  Each returns: {"passed": bool, "reason": str}
+  G3: always {"passed": True, "reason": "auto-resolved"}
+  G4: check state["comprehensive_plan"].get("coherence_score", 0) >= 0.85
+
+backend/app/agents/graph.py:
+  async def build_pipeline_graph() -> StateGraph
+  build_graph = build_pipeline_graph  ← alias, both names work
+
+  6 stages + error_handler:
+    Stage 1 input_layer: G1 + Layer 1+2 inject
+    Stage 2 csuite_analysis: 8 agents asyncio.gather, G2 per agent, G3 resolve
+    Stage 3 synthesis: Synthesizer, G4 (>=0.85), retry once on fail
+    Stage 4 spec_layer: 5 spec agents parallel
+    Stage 5 bootstrap: BuildManifest, G6, cache check
+    Stage 6 build: 10 sequential agents, G7 per agent
+
+  EVERY stage MUST publish Redis event on entry AND completion:
+    await redis_client.publish(f"pipeline:{state['pipeline_id']}", json.dumps({
+      "stage": n, "status": "running"|"completed"|"failed",
+      "message": "...", "timestamp_ms": int(time.time()*1000)
+    }))
+
+backend/app/services/pipeline_service.py:
+  start_pipeline(project_id, user_id, idea_spec) -> str:
+    Create PipelineRun in Supabase PostgreSQL via get_write_session()
+    Send Inngest event — NON-BLOCKING, returns pipeline_id immediately:
+      await forge_inngest.send(inngest.Event(
+          name="forge/pipeline.run",
+          data={"pipeline_id": pipeline_id, "project_id": project_id,
+                "user_id": str(user_id), "idea_spec": idea_spec}
+      ))
+    Return pipeline_id. Must return in < 200ms.
+    NEVER await the pipeline to complete inline.
+
+backend/app/api/v1/pipeline.py:
+  POST /api/v1/pipeline/run — calls start_pipeline, returns {pipeline_id, status}
+  GET  /api/v1/pipeline/{id}/status — verify ownership (WHERE id AND user_id)
+  GET  /api/v1/pipeline/{id}/stages — verify ownership
+  WS   /api/v1/pipeline/{id}/stream:
+    Subscribe Redis channel f"pipeline:{pipeline_id}"
+    Forward messages to WebSocket
+    Unsubscribe + close Redis in finally block
+
+backend/tests/test_pipeline.py:
+  test_pipeline_state_has_all_fields
+  test_gate_g3_always_passes
+  test_gate_g4_requires_085
+  test_start_pipeline_nonblocking (time POST, must return < 500ms)
+  test_pipeline_status_wrong_owner → 404
+  test_websocket_cleanup
+
+pytest tests/test_pipeline.py -v</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. python -c "from app.agents.graph import build_graph, build_pipeline_graph; print('OK')"
+2. start_pipeline sends forge_inngest.send() event (not trigger_client.trigger)?
+   grep -n "forge_inngest.send\|inngest.Event" backend/app/services/pipeline_service.py
+3. start_pipeline returns immediately (< 500ms)?
+4. Every stage publishes Redis event on entry AND completion?
+5. WS: Redis unsubscribed in finally block?
+6. pytest tests/test_pipeline.py -v — all pass?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 2.1</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 2.1: LangGraph pipeline, 12 gates, Inngest event trigger"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 2.2 -->
+<div class="sc" id="s22">
+<div class="sc-h"><span class="sc-n">2.2</span><div><div class="sc-t">C-Suite — 8 parallel executive agents</div><div class="sc-d">CEO · CTO · CDO · CMO · CPO · CSO · CCO · CFO · G3 resolver · Synthesizer</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first.
+
+Build 8 C-Suite executive agents in backend/app/agents/csuite/.
+All: temperature=0.7, return safe defaults on API failure (never raise).
+Output validated against Pydantic schema (Gate G2).
+
+ceo_agent.py: market_opportunity (TAM/SAM/SOM), business_model, revenue_strategy, competitive_moat
+cto_agent.py: tech_stack_recommendation, api_design, scalability_approach, technical_risks
+cdo_agent.py: ux_principles, design_system_recommendation, brand_identity, user_journey_map
+cmo_agent.py: gtm_strategy, target_customer_profile, growth_channels, positioning_statement
+cpo_agent.py: feature_prioritization (MoSCoW), mvp_scope, user_stories (top 10), success_metrics
+cso_agent.py: auth_architecture, encryption_requirements, compliance_needs, threat_model
+cco_agent.py: regulatory_requirements, privacy_policy_requirements, gdpr_obligations
+cfo_agent.py: pricing_strategy, unit_economics, cac_estimate, ltv_estimate, breakeven_analysis
+
+backend/app/agents/synthesis/g3_resolver.py:
+  Conflict rules: CFO wins over CTO on budget, CPO scope wins over timeline,
+    CSO/CCO always wins. G3 ALWAYS returns passed=True — never blocks.
+
+backend/app/agents/synthesis/synthesizer.py:
+  Merges all 8 into ComprehensivePlan with coherence_score: float
+  G4: coherence_score >= 0.85. Retry once on fail.
+
+Update graph.py Stage 2: asyncio.gather all 8, then G3, then synthesizer, then G4.
+
+pytest tests/test_csuite.py -v</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. 8 agents run via asyncio.gather (parallel, not sequential)?
+2. Any agent API failure: returns defaults, never raises?
+3. G3 always returns passed=True?
+4. pytest tests/test_csuite.py -v — all pass?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 2.2</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 2.2: C-Suite 8 agents, G3 resolver, Synthesizer"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 2.3 -->
+<div class="sc" id="s23">
+<div class="sc-h"><span class="sc-n">2.3</span><div><div class="sc-t">Reliability Layers 1, 2 and 4</div><div class="sc-d">Pre-generation contracts · schema injection · ts-morph file coherence (ReviewAgent ONLY)</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first. Build Reliability Layers 1, 2, and 4.
+
+LAYER 1 — backend/app/reliability/layer1_pregeneration/
+  dependency_resolver.py: resolve npm peer deps, auto-resolve conflicts
+  lockfile_generator.py: deterministic package-lock.json
+  env_contract_validator.py: validate all required .env vars before Stage 1
+
+LAYER 2 — backend/app/reliability/layer2_schema_driven/
+  openapi_injector.py: generates OpenAPI 3.1 YAML → injected into APIAgent
+  zod_schema_injector.py: Zod schemas → injected into ComponentAgent + PageAgent
+  pydantic_schema_injector.py: Pydantic v2 → injected into APIAgent + DBAgent
+  db_type_injector.py: SQL → TypeScript interfaces → AFTER DBAgent, BEFORE PageAgent
+    CRITICAL: Pydantic Optional[str] → TypeScript string | null (not just string)
+
+Integrate into graph.py:
+  Before Stage 4: openapi_spec into architect context
+  Before ComponentAgent: zod + pydantic schemas
+  Before APIAgent: openapi + pydantic schemas
+  AFTER DBAgent: db_type_injector → inject into PageAgent + ComponentAgent
+
+LAYER 4 — backend/app/reliability/layer4_coherence/
+CRITICAL: run ONLY from ReviewAgent (build agent 10). Never in agents 1-9.
+
+  file_coherence_engine.py: run_coherence_check(build_id, generated_files)
+    Write .ts/.tsx to temp dir → ts-morph subprocess → map exports/imports
+    AUTO-FIX: levenshtein <=2 typos, case mismatches
+    ESCALATE: missing source files, wrong export names
+    Store CoherenceReport via get_write_session()
+    Clean up temp in finally block
+  barrel_validator.py, seam_checker.py
+
+pytest tests/test_reliability_layers124.py -v</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. db_type_injector called AFTER DBAgent, BEFORE PageAgent?
+2. grep file_coherence_engine backend/app/agents/build/ — only in review_agent.py?
+3. Optional[str] → string | null (not just string)?
+4. Temp dir cleaned in finally block?
+5. pytest tests/test_reliability_layers124.py -v — all pass?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 2.3</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 2.3: Reliability Layers 1+2+4"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 2.4 -->
+<div class="sc" id="s24">
+<div class="sc-h"><span class="sc-n">2.4</span><div><div class="sc-t">All 10 sequential build agents</div><div class="sc-d">Scaffold → Review — temperature=0, seed=42 · snapshot after each · hotfix callable stub</div></div></div>
+<div class="sc-b">
+<div class="bi"><strong>When Copilot asks about stubs:</strong> hotfix_agent — callable stub returning HotfixResult(success=False, reason="not_yet_implemented"). ReviewAgent sandbox tools — stub with log + passing result. Both need correct signatures.</div>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first. Build all 10 sequential build agents in backend/app/agents/build/.
+All: temperature=0, seed=42.
+After EVERY agent: call snapshot_service.capture_snapshot().
+
+Agent 1 — scaffold_agent.py: Layer 1 first, then scaffold project structure + CI
+Agent 2 — router_agent.py: Layer 2 inject routes, generate all route stubs
+Agent 3 — component_agent.py: Layer 2 inject Zod schemas, Layer 3 AST analysis, generate UI components
+Agent 4 — page_agent.py: Layer 2 inject prop types, Layer 6 auto-inject ErrorBoundary
+Agent 5 — api_agent.py: Layer 2 inject OpenAPI spec (implement EXACTLY to spec), Layer 5 validate after
+Agent 6 — db_agent.py: Layer 2 inject Pydantic schemas, Layer 9 migration_safety() BEFORE writing SQL
+  AFTER this agent: db_type_injector generates TS types for agents 3+4
+Agent 7 — auth_agent.py: Layer 5 use auth_jwt or oauth_pkce pattern from pattern_library
+Agent 8 — style_agent.py: UNIQUE palette per app domain (NOT FORGE #63d9ff/#ff6b35)
+  Layer 10: css_validator validates Tailwind compiles
+Agent 9 — test_agent.py: unit + integration tests, happy path + edge cases
+Agent 10 — review_agent.py (VALIDATES ONLY — no application code):
+  1. Layer 4: file_coherence_engine.run_coherence_check()
+  2. Gate G8 STUB: log, return passing
+  3. Gate G11 STUB: return passing
+  4. Gate G12 STUB: return passing
+  5. Layer 8 STUB: all tools return passing
+  6. snapshot_service.capture_snapshot(build_id, project_id, "review", 10)
+  If all pass: mark build COMPLETED
+
+backend/app/agents/build/hotfix_agent.py — CALLABLE STUB:
+  @dataclass
+  class HotfixResult:
+    success: bool; changes: list; reason: str
+
+  async def apply_hotfix(error_context, generated_files, ai_router) -> HotfixResult:
+    return HotfixResult(success=False, changes=[], reason="not_yet_implemented")
+
+graph.py Stage 6: agents 1-9 sequentially, snapshot + G7 after each
+  G7 fail: call apply_hotfix (stub returns False → mark failed)
+  After 9: run review_agent
+  Store generated_files to Supabase Storage: bucket=SUPABASE_BUCKET_PROJECTS
+
+pytest tests/test_build_agents.py -v</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. Every agent: temperature=0, seed=42?
+2. snapshot_service.capture_snapshot after ALL 10 agents?
+3. review_agent generates zero application code?
+4. Generated files stored to Supabase Storage (not R2)?
+   grep -rn "SUPABASE_BUCKET" backend/app/agents/build/scaffold_agent.py
+5. File coherence ONLY in review_agent?
+6. style_agent: unique palette, not FORGE #63d9ff?
+7. pytest tests/test_build_agents.py -v — all pass?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 2.4</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 2.4: All 10 build agents, Gates G7-G12 stubs, hotfix stub"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 2.5 -->
+<div class="sc" id="s25">
+<div class="sc-h"><span class="sc-n">2.5</span><div><div class="sc-t">Reliability Layers 3, 5 and 6</div><div class="sc-d">ts-morph static analysis · 30+ code patterns · Pinecone build cache</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first. Build Reliability Layers 3, 5, and 6.
+
+LAYER 3 — backend/app/reliability/layer3_static/
+  ast_analyser.py: ts-morph → detect null refs, unhandled async, missing error boundaries
+  import_graph_resolver.py: circular imports, missing files, duplicate packages
+  runtime_error_predictor.py: pattern-match "Cannot read property", "Maximum update depth" etc.
+
+LAYER 5 — backend/app/reliability/layer5_contracts/
+  pattern_library.py — 30+ patterns with name, description, implementation_template, test_template
+    Include: auth_jwt, oauth_pkce, stripe_webhook, rate_limiting,
+      file_upload_supabase, pagination_cursor, optimistic_update, error_boundary,
+      zustand_store, tanstack_query, form_validation, supabase_realtime, resend_email
+  api_contract_validator.py: validate generated routes against OpenAPI spec
+  type_inference_engine.py: Pydantic Optional[str] → TypeScript string | null (CRITICAL)
+
+LAYER 6 — backend/app/reliability/layer6_intelligence/
+  build_cache.py (Pinecone, similarity >= 0.92):
+    check_cache(idea_spec) → CacheResult | None
+    store_in_cache(idea_spec, files) — ONLY store builds that passed ALL gates
+  build_memory.py: record + retrieve successful build patterns
+  error_boundary_injector.py: wraps pages in ErrorBoundary — called by review_agent, not page_agent
+  incremental_build.py: sha256 hash comparison for partial rebuilds
+
+pytest tests/test_reliability_layers356.py -v</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. build_cache stores ONLY builds that passed ALL gates?
+2. type_inference_engine: Optional[str] → string | null?
+3. file_upload_supabase pattern exists (not S3/R2)?
+4. error_boundary_injector called from review_agent (not page_agent)?
+5. pytest tests/test_reliability_layers356.py -v — all pass?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 2.5</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 2.5: Reliability Layers 3+5+6"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 2.6 -->
+<div class="sc" id="s26">
+<div class="sc-h"><span class="sc-n">2.6</span><div><div class="sc-t">Reliability Layer 7 — Wiremock</div><div class="sc-d">Stubs for GENERATED APP services only — Supabase/Northflank are never mocked</div></div></div>
+<div class="sc-b">
+<div class="bi"><strong>These stubs simulate external APIs that user-built apps call</strong> (Stripe, Resend, OpenAI, etc.) during pipeline smoke tests. FORGE's own Supabase database is never proxied through Wiremock.</div>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first.
+
+backend/app/reliability/layer7_simulation/
+  wiremock_manager.py: start(), configure_stubs(services), verify_all_calls(), stop()
+    stop() MUST be in finally block — always called even on pipeline failure
+  stubs/: stripe_stub, resend_stub, openai_stub, anthropic_stub, twilio_stub, sendgrid_stub
+    Non-stubbed endpoints → 404 (no internet pass-through)
+
+Integration in graph.py Stage 6:
+  try:
+    await wiremock_manager.start()
+    await wiremock_manager.configure_stubs(detect_required_services(state))
+    os.environ["EXTERNAL_API_BASE_URL"] = "http://localhost:8089"
+    # run all 10 build agents
+    await wiremock_manager.verify_all_calls()
+  finally:
+    await wiremock_manager.stop()
+
+pytest tests/test_layer7_wiremock.py -v
+Test: non-stubbed endpoint → 404</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. wiremock_manager.stop() in finally block?
+2. Non-stubbed endpoints → 404 (no internet pass-through)?
+3. EXTERNAL_API_BASE_URL set BEFORE agents run?
+4. pytest tests/test_layer7_wiremock.py -v — all pass?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 2.6</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 2.6: Reliability Layer 7 — Wiremock service stubs"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 2.7 -->
+<div class="sc" id="s27">
+<div class="sc-h"><span class="sc-n">2.7</span><div><div class="sc-t">Reliability Layer 8 — Post-build verification</div><div class="sc-d">Lighthouse CI · axe-core WCAG 2.1 AA · Semgrep SAST · dead code · Faker.js seeds</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first. Build Layer 8 — all called from review_agent.
+
+backend/app/reliability/layer8_verification/
+  visual_regression.py: Playwright screenshots, baseline → Supabase SUPABASE_BUCKET_SCREENSHOTS
+  sast_scanner.py: Semgrep + detect-secrets, critical/high → Gate G11 failure
+  perf_budget.py: Lighthouse CI, LCP<=2500ms CLS<=0.1 FID<=100ms bundle<=500KB
+  accessibility_audit.py: axe-core WCAG 2.1 AA, critical violations fail, serious = warning
+  dead_code_detector.py: ts-prune, WARNING ONLY — never fails the build
+  seed_generator.py: Faker.js, 10 users + 5-20 records, respects FK order
+
+review_agent calls in order: visual_regression → sast → perf → a11y → dead_code → seed
+
+pytest tests/test_layer8_verification.py -v</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. dead_code_detector never fails the build (warning only)?
+2. visual_regression stores to Supabase SUPABASE_BUCKET_SCREENSHOTS (not R2)?
+3. seed_generator respects FK order?
+4. pytest tests/test_layer8_verification.py -v — all pass?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 2.7</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 2.7: Reliability Layer 8 — post-build verification"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 2.8 -->
+<div class="sc" id="s28">
+<div class="sc-h"><span class="sc-n">2.8</span><div><div class="sc-t">Reliability Layers 9 and 10</div><div class="sc-d">Real hotfix agent (3 attempts max) · rollback · canary deploy · context window manager · fallback cascade</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first. Build Reliability Layers 9 and 10.
+
+LAYER 9 — backend/app/reliability/layer9_resilience/
+  hotfix_agent.py — REAL implementation (replaces 2.4 stub):
+    apply_hotfix(error_context, generated_files, ai_router) -> HotfixResult
+    Identify failing file, extract failing function, generate targeted fix at temperature=0
+    Hard limit: 3 attempts maximum
+
+  rollback_engine.py: find last build status=success in Supabase, restore from Supabase Storage
+  canary_deploy.py: 5% → 25% → 100% traffic, auto-rollback at error_rate >= 0.1%
+  migration_safety.py: block DROP TABLE + DELETE without WHERE, called by db_agent BEFORE writing
+
+LAYER 10 — backend/app/reliability/layer10_ai/
+  LIMITS = {"claude-opus-4-6":200000, "claude-sonnet-4-6":200000, "gpt-4o":128000}
+  context_window_manager.py: chunk at 60% limit with 200-token overlap, merge via seam_checker
+  css_validator.py: extract classNames from TSX, run tailwindcss build, find invalid classes
+  determinism_enforcer.py: decorator ensuring temperature=0, seed=42 on build agents
+  fallback_cascade.py: anthropic→openai→gemini→mistral→cohere, log every fallback for billing
+
+pytest tests/test_reliability_layers910.py -v
+
+Update AGENTS.md Build Status to "Phase: 3 — Preview System"</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. hotfix_agent: max 3 attempts?
+2. rollback_engine fetches from Supabase Storage (not R2)?
+3. canary_deploy auto-rollbacks at error_rate >= 0.1%?
+4. fallback_cascade logs provider used (for billing)?
+5. pytest tests/test_reliability_layers910.py -v — all pass?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit — Phase 2 complete</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add .
+<span class="pr">$</span> git commit -m "Phase 2 COMPLETE: All 10 layers, 26 agents, full pipeline"</code></pre></div>
+</div>
+</div></div>
+
+<!-- ═══ PHASE 3 ═══ -->
+<div class="ph" id="p3">
+  <div class="ph-b">Phase 3 · Sessions 3.1–3.6</div>
+  <div class="ph-t">Preview System</div>
+  <div class="ph-d">Live preview, file sync &lt;700ms, snapshot timeline, annotations, dev console. Opus 4.6 High for 3.1–3.2. Sonnet 4.6 High for 3.3–3.6.</div>
+</div>
+
+<!-- 3.1 -->
+<div class="sc" id="s31">
+<div class="sc-h"><span class="sc-n">3.1</span><div><div class="sc-t">Preview system backend — 4 services + 10 routes</div><div class="sc-d">preview_service · snapshot_service · annotation_service · file_sync_service</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first.
+
+backend/app/services/preview_service.py:
+  get_preview_url(sandbox_id, user_id): fetch sandbox from Supabase PostgreSQL
+  check_preview_health(sandbox_id): HTTP to sandbox, cache Redis 10s TTL
+  take_screenshot(sandbox_id, route): Playwright → WebP → Supabase SUPABASE_BUCKET_SCREENSHOTS
+  create_share(sandbox_id, user_id, expires_hours=24):
+    token = HMAC-SHA256("{sandbox_id}:{expires_at_unix}", FORGE_HMAC_SECRET)
+    Store in Redis (TTL) + preview_shares table (Supabase PostgreSQL)
+  revoke_share(token, user_id): verify ownership → 403 if not owner, then delete
+
+backend/app/services/snapshot_service.py:
+  capture_snapshot(build_id, project_id, agent_type, agent_number):
+    Playwright → WebP → Supabase SUPABASE_BUCKET_SNAPSHOTS
+    path: snapshots/{project_id}/{build_id}/{agent_number:02d}_{agent_type}.webp
+    Store build_snapshots record via get_write_session()
+    PUBLISH Redis "build:snapshot:{build_id}"
+  get_snapshots(project_id, build_id=None): ordered by agent_number
+
+backend/app/services/annotation_service.py:
+  create_annotation: validate 0.0 <= x_pct, y_pct <= 1.0 → 400 if invalid
+  get_annotations, resolve_annotation, delete_annotation, clear_annotations
+  get_annotations_for_ai_context(project_id) -> str:
+    EMPTY STRING (not None) if no unresolved annotations
+
+backend/app/services/file_sync_service.py:
+  sync_file(sandbox_id, path, content): PUBLISH Redis "file_sync:{sandbox_id}", target < 300ms
+
+10 routes in backend/app/api/v1/sandbox.py (all require auth + ownership):
+  preview-url, preview/health, preview/screenshot, preview/share, share/{token} DELETE,
+  console (WS), snapshots, annotations, annotations POST, annotation/{id} DELETE, annotations DELETE
+
+pytest tests/test_preview_backend.py -v
+Test: user B cannot revoke user A's share → 403</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. Screenshots/snapshots stored to Supabase Storage (not R2)?
+   grep -rn "SUPABASE_BUCKET" backend/app/services/snapshot_service.py
+2. preview_health cached 10s in Redis?
+3. create_share HMAC includes BOTH sandbox_id AND expires_at?
+4. revoke_share verifies ownership → 403 if not owner?
+5. get_annotations_for_ai_context returns "" (not None) when empty?
+6. pytest tests/test_preview_backend.py -v — all pass?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 3.1</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 3.1: Preview backend — 4 services, 10 routes, Supabase Storage"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 3.2 -->
+<div class="sc" id="s32">
+<div class="sc-h"><span class="sc-n">3.2</span><div><div class="sc-t">Cloudflare preview proxy Worker</div><div class="sc-d">*.preview.forge.dev · Supabase HS256 JWT · HMAC share tokens · HMR Durable Object</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first.
+
+workers/preview-proxy/src/index.ts:
+  1. Extract sandbox_id from subdomain
+  2. Authenticate: JWT cookie (HS256, SUPABASE_JWT_SECRET, check exp)
+     OR ?token= HMAC (signature + expires_at both required)
+     Fail: 401
+  3. KV lookup: "sandbox:{id}:url" → sandbox URL, 404 if missing
+  4. WebSocket upgrade → PreviewHMR Durable Object
+  5. HTTP → proxy to sandbox
+
+workers/preview-proxy/src/hmr-relay.ts — Durable Object PreviewHMR:
+  Bidirectional browser ↔ sandbox Vite HMR (port 24678)
+  Sandbox disconnect: send {type:"server-restart"}, reconnect backoff 1s/2s/4s max 30s, max 5 attempts
+  Browser disconnect: keep sandbox WS alive 30s
+
+workers/preview-proxy/src/auth.ts:
+  validateSupabaseJWT(token, supabase_jwt_secret): HS256, check exp — local only, no network
+  validateShareToken(token, sandbox_id, expires_at_unix, hmac_secret): signature + expiry both
+
+wrangler.toml: routes *.preview.forge.dev/*, KV SANDBOX_URLS, DO PREVIEW_HMR
+# Add secrets: wrangler secret put SUPABASE_JWT_SECRET && wrangler secret put FORGE_HMAC_SECRET
+
+npm run build — zero TypeScript errors
+Unit tests: tampered expires_at fails, expired JWT fails</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. JWT uses SUPABASE_JWT_SECRET + HS256 (not JWKS, not RS256)?
+   grep "SUPABASE_JWT_SECRET\|HS256\|HMAC" workers/preview-proxy/src/auth.ts
+2. HMAC: checks BOTH signature AND expires_at?
+3. Durable Object: max 5 reconnect attempts?
+4. npm run build — zero TypeScript errors?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 3.2</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 3.2: CF Worker — Supabase HS256 JWT, HMR Durable Object"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 3.3 -->
+<div class="sc" id="s33">
+<div class="sc-h"><span class="sc-n">3.3</span><div><div class="sc-t">PreviewPane + PreviewToolbar</div><div class="sc-d">Live iframe · health polling · device frames · screenshot · share modal</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Sonnet 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md and DESIGN_BRIEF.md first.
+
+frontend/src/hooks/usePreview.ts:
+  Mount: GET /sandbox/{id}/preview-url
+  Poll health 30s: GET /sandbox/{id}/preview/health — clean up in useEffect return
+  selectedSnapshot: show snapshot image instead of iframe
+
+frontend/src/components/editor/PreviewPane.tsx:
+  310px width, display:flex flex-direction:column
+  [PreviewToolbar 38px] [PreviewBody flex:1] [DevConsole placeholder] [SnapshotTimeline placeholder 38px]
+  Before iframe loads: document.cookie = `forge_access_token=${token}; domain=.preview.forge.dev; path=/`
+
+frontend/src/components/editor/PreviewToolbar.tsx:
+  38px, rgba(4,4,10,0.95) bg
+  [← →] [URL bar flex:1 9px JetBrains Mono] [📱 mobile → max-width:375px] [💻 desktop]
+  [↺ refresh] [📷 screenshot → download WebP] [✏️ annotate → ember when active]
+  [🔗 share → popover URL + "Copied!", auto-dismiss 5s or outside click]
+  [Error badge "● N" ember → editorStore.devConsoleErrors]
+
+npm run typecheck — zero errors</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. Health polling cleaned up in useEffect return?
+2. Cookie scoped to .preview.forge.dev (not localhost)?
+3. Error badge reads editorStore.devConsoleErrors?
+4. npm run typecheck — zero errors?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 3.3</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 3.3: PreviewPane + PreviewToolbar"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 3.4 -->
+<div class="sc" id="s34">
+<div class="sc-h"><span class="sc-n">3.4</span><div><div class="sc-t">AnnotationLayer</div><div class="sc-d">Click-to-annotate · postMessage CSS selector · ember pulsing dots · resolve/delete</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Sonnet 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md and DESIGN_BRIEF.md first.
+
+frontend/src/components/editor/AnnotationLayer.tsx:
+  position:absolute inset:0
+  annotationMode false: pointer-events:none
+  annotationMode true: cursor:crosshair pointer-events:all
+
+  ON CLICK: x_pct=offsetX/w, y_pct=offsetY/h (validate 0-1)
+    postMessage to iframe: {type:'get_selector', x, y}
+    ONLY accept reply from origin preview.forge.dev
+    → show floating textarea at position → POST /annotations on save
+    Clean up message listener in useEffect return
+
+  DOTS per annotation (position:absolute, left:{x*100}%, top:{y*100}%):
+    Unresolved: 12px #ff6b35 circle, ember-pulse from index.css,
+      pointer-events:all even when annotationMode is false
+    Resolved: #3dffa0 opacity:0.5, no animation
+    Hover: tooltip (max 60 chars)
+    Click unresolved: popover with [Mark Resolved] [Delete]
+
+  POSTMESSAGE SCRIPT for iframe: elementFromPoint → buildSelectorPath (max 4 deep)
+    → reply {type:'selector_result', selector, route:location.pathname}
+
+npm run typecheck — zero errors</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. postMessage: only accept from preview.forge.dev origin?
+2. Unresolved dots pointer-events:all even when annotationMode false?
+3. Message listener cleaned up in useEffect return?
+4. npm run typecheck — zero errors?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 3.4</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 3.4: AnnotationLayer — click-to-annotate, ember dots"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 3.5 -->
+<div class="sc" id="s35">
+<div class="sc-h"><span class="sc-n">3.5</span><div><div class="sc-t">SnapshotTimeline</div><div class="sc-d">10 dots + jade LIVE dot · thumbnail hover · time-travel</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Sonnet 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md and DESIGN_BRIEF.md first.
+
+frontend/src/components/editor/SnapshotTimeline.tsx:
+  38px flex-shrink:0, rgba(4,4,10,0.95), border-top:1px solid rgba(255,255,255,0.06)
+  "BUILD" label + 10-dot track (dot+segment×10, NO segment after last dot)
+
+  Dot states: no snapshot=rgba(255,255,255,0.10), exists=#3dffa0 cursor:pointer,
+    selected=#63d9ff 2px border 3px glow
+
+  LIVE dot (#3dffa0, jade-pulse from index.css — NOT inline keyframe)
+  Status: "● LIVE" in #3dffa0 or "After {agent_name}" muted
+
+  Agent names 0-9: Scaffold, Router, Component, Page, API, DB, Auth, Style, Test, Review
+
+  Click existing → onSelectSnapshot(snapshots[i])
+  Click selected or LIVE → onSelectSnapshot(null)
+  Hover existing: popover ABOVE (bg:#0d0d1f), <img 180px> + agent name + "2:34 PM"
+    Dismiss on mouse leave, clean up on unmount
+
+npm run typecheck — zero errors</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. No segment after last dot?
+2. jade-pulse from index.css (not inline)?
+3. Hover tooltip cleans up on unmount?
+4. npm run typecheck — zero errors?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit Session 3.5</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 3.5: SnapshotTimeline — 10 dots, thumbnails, time-travel"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 3.6 -->
+<div class="sc" id="s36">
+<div class="sc-h"><span class="sc-n">3.6</span><div><div class="sc-t">PreviewDevConsole</div><div class="sc-d">Console/Network/Errors tabs · WebSocket · max 200 lines · Send to AI</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Sonnet 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md and DESIGN_BRIEF.md first.
+
+frontend/src/components/editor/PreviewDevConsole.tsx:
+  rgba(4,4,10,0.97), flex-shrink:0, max-height:160px collapsible
+  Header: [▼/▶ toggle] CONSOLE | NETWORK | ERRORS●{n} [⊡ expand] [✕ clear]
+
+  WS: wss://{API_BASE}/api/v1/sandbox/{sandboxId}/console
+    Types: log, warn, error, network_request, network_response
+    Reconnect with backoff. Close in useEffect return (critical).
+
+  CONSOLE: max 200 lines (remove oldest), auto-scroll unless user scrolled up
+    log: rgba(238,240,246,0.45) · warn: #f5c842 · error: #ff6b35
+
+  NETWORK: pair request+response by ID (not arrival order)
+    2xx=jade, 3xx=gold, 4xx/5xx=ember. Click → expand headers+body (1000 chars)
+
+  ERRORS: per error: message ember + stack trace muted
+    [Send to AI ↑] → append to chat, set editorStore.chatVisible=true
+
+  CRITICAL: editorStore.devConsoleErrors = current error count
+    PreviewToolbar badge reads this.
+
+npm run typecheck — zero errors</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>1. WebSocket closed in useEffect return?
+2. Console capped at 200 lines?
+3. Auto-scroll stops when user scrolls up?
+4. devConsoleErrors synced to editorStore?
+5. Network tab pairs by request ID (not arrival order)?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit — Phase 3 complete</span></div>
+  <div class="bb"><p class="inst">Update AGENTS.md to Phase: 4 — Polish. Then:</p>
+<pre><code><span class="pr">$</span> cd ~/forge && git add .
+<span class="pr">$</span> git commit -m "Phase 3 COMPLETE: Preview — pane, annotations, timeline, console"</code></pre></div>
+</div>
+</div></div>
+<!-- ═══ PHASE 4 ═══ -->
+<div class="ph" id="p4">
+  <div class="ph-b">Phase 4 · Sessions 4.1–4.3</div>
+  <div class="ph-t">Polish and Production Readiness</div>
+  <div class="ph-d">Inngest durable functions, E2E test, security audit. Opus 4.6 High for all three sessions.</div>
+</div>
+
+<!-- 4.1 — INNGEST — complete rewrite -->
+<div class="sc" id="s41">
+<div class="sc-h"><span class="sc-n">4.1</span><div><div class="sc-t">Inngest durable functions — 5 event-driven jobs</div><div class="sc-d">forge_inngest client · pipeline-run · build-run · idea-generation · sandbox-lifecycle · pool-replenish cron</div></div></div>
+<div class="sc-b">
+<div class="bi"><strong>How Inngest works in FORGE:</strong> The <code>forge_inngest</code> client is already created in <code>inngest_client.py</code> (Session 1.1). Functions listen for named events (e.g. <code>forge/pipeline.run</code>). Your app sends those events via <code>forge_inngest.send()</code>. Inngest calls your functions via the <code>/api/inngest</code> HTTP endpoint. Steps inside functions use <code>step.run()</code> for automatic retry and durability. The local dev server at <code>localhost:8288</code> lets you trigger and inspect functions before deploying.</div>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first.
+
+Build the 5 Inngest durable functions for FORGE.
+
+backend/app/functions/__init__.py — module init
+backend/app/functions/inngest_functions.py — all 5 functions in one file
+
+Import the already-created client:
+  from app.inngest_client import forge_inngest
+  import inngest
+
+─── FUNCTION 1: pipeline-run ───
+@forge_inngest.create_function(
+    fn_id="pipeline-run",
+    trigger=inngest.TriggerEvent(event="forge/pipeline.run"),
+    retries=3,
+)
+async def pipeline_run_fn(ctx: inngest.Context, step: inngest.StepAsync) -> None:
+    """
+    Triggered by forge_inngest.send(Event(name="forge/pipeline.run", data={...}))
+    from pipeline_service.start_pipeline().
+    """
+    data = ctx.event.data  # {pipeline_id, project_id, user_id, idea_spec}
+
+    await step.run("update-status-running", lambda: update_pipeline_status(
+        data["pipeline_id"], "running"))
+
+    await step.run("execute-pipeline", lambda: run_pipeline_graph(data))
+
+    await step.run("update-status-completed", lambda: update_pipeline_status(
+        data["pipeline_id"], "completed"))
+
+# Failure handler — separate function listening to the system failure event
+@forge_inngest.create_function(
+    fn_id="pipeline-failure-handler",
+    trigger=inngest.TriggerEvent(event="inngest/function.failed"),
+)
+async def pipeline_failure_handler_fn(ctx: inngest.Context, step: inngest.StepAsync) -> None:
+    """
+    Inngest fires this when pipeline-run exhausts all retries.
+    CRITICAL: must update Supabase PostgreSQL status to 'failed'.
+    Without this, failed pipelines show as 'running' forever.
+    """
+    failed_fn_id = ctx.event.data.get("function_id", "")
+    if failed_fn_id == "pipeline-run":
+        pipeline_id = ctx.event.data.get("event", {}).get("data", {}).get("pipeline_id")
+        if pipeline_id:
+            await step.run("mark-failed", lambda: update_pipeline_status(pipeline_id, "failed"))
+
+─── FUNCTION 2: build-run ───
+@forge_inngest.create_function(
+    fn_id="build-run",
+    trigger=inngest.TriggerEvent(event="forge/build.run"),
+    retries=2,
+)
+async def build_run_fn(ctx: inngest.Context, step: inngest.StepAsync) -> None:
+    """
+    Runs Stage 6 (build agents) independently for user-triggered rebuilds.
+    Event data: {build_id, project_id}
+    """
+    data = ctx.event.data
+    await step.run("update-status-building", lambda: update_build_status(data["build_id"], "building"))
+    await step.run("run-build-agents", lambda: run_build_agents(data))
+    await step.run("update-status-complete", lambda: update_build_status(data["build_id"], "success"))
+
+─── FUNCTION 3: idea-generation ───
+@forge_inngest.create_function(
+    fn_id="idea-generation",
+    trigger=inngest.TriggerEvent(event="forge/idea.generate"),
+    retries=2,
+    timeout="2m",
+)
+async def idea_generation_fn(ctx: inngest.Context, step: inngest.StepAsync) -> None:
+    """
+    Generates 5 unique ideas from questionnaire answers.
+    Event data: {session_id, user_id, answers}
+    Stores ideas in Supabase PostgreSQL ideas table.
+    """
+    data = ctx.event.data
+    ideas = await step.run("generate-ideas", lambda: generate_five_ideas(data["answers"]))
+    await step.run("store-ideas", lambda: store_ideas(data["session_id"], data["user_id"], ideas))
+    await step.run("mark-complete", lambda: mark_idea_session_complete(data["session_id"]))
+
+─── FUNCTION 4: sandbox-lifecycle ───
+@forge_inngest.create_function(
+    fn_id="sandbox-lifecycle",
+    trigger=inngest.TriggerEvent(event="forge/sandbox.lifecycle"),
+    retries=3,
+)
+async def sandbox_lifecycle_fn(ctx: inngest.Context, step: inngest.StepAsync) -> None:
+    """
+    Manages Firecracker VM lifecycle via Northflank API.
+    Event data: {action: 'provision'|'start'|'stop'|'destroy', sandbox_id?, project_id?}
+    Updates sandboxes table in Supabase PostgreSQL.
+    Northflank API errors are retried automatically (retries=3).
+    """
+    data = ctx.event.data
+    action = data["action"]
+
+    await step.run(f"northflank-{action}", lambda: call_northflank_api(action, data))
+    await step.run("update-sandbox-status", lambda: update_sandbox_status(
+        data.get("sandbox_id"), action_to_status(action)))
+
+─── FUNCTION 5: pool-replenish (CRON) ───
+@forge_inngest.create_function(
+    fn_id="pool-replenish",
+    trigger=inngest.TriggerCron(cron="*/5 * * * *"),
+)
+async def pool_replenish_fn(ctx: inngest.Context, step: inngest.StepAsync) -> None:
+    """
+    Runs every 5 minutes. Counts warm sandboxes in Supabase PostgreSQL.
+    If below POOL_TARGET (default 20), provisions new Firecracker VMs.
+    """
+    warm_count = await step.run("count-warm-sandboxes", count_warm_sandboxes)
+    target = int(os.getenv("POOL_TARGET", "20"))
+
+    if warm_count < target:
+        needed = target - warm_count
+        await step.run(f"provision-{needed}-vms", lambda: provision_vms(needed))
+
+Helper functions in same file (or imported from services):
+  update_pipeline_status(pipeline_id, status) — uses get_write_session()
+  update_build_status(build_id, status) — uses get_write_session()
+  update_sandbox_status(sandbox_id, status) — uses get_write_session()
+  run_pipeline_graph(data) — calls the LangGraph graph
+  run_build_agents(data) — calls Stage 6 build agents
+  generate_five_ideas(answers) — 5 parallel AI calls
+  store_ideas(session_id, user_id, ideas) — uses get_write_session()
+  mark_idea_session_complete(session_id) — uses get_write_session()
+  call_northflank_api(action, data) — calls Northflank REST API
+  action_to_status(action) — maps action string to sandbox status string
+  count_warm_sandboxes() — uses get_read_session(), counts status='warm'
+  provision_vms(n) — calls northflank API to provision n new VMs
+
+Update backend/app/main.py — register all 5 functions with Inngest:
+  from inngest.fast_api import serve as inngest_serve
+  from app.inngest_client import forge_inngest
+  from app.functions.inngest_functions import (
+      pipeline_run_fn, pipeline_failure_handler_fn,
+      build_run_fn, idea_generation_fn,
+      sandbox_lifecycle_fn, pool_replenish_fn,
+  )
+
+  # Replace the empty functions=[] from Session 1.1:
+  app.include_router(
+      inngest_serve(forge_inngest, functions=[
+          pipeline_run_fn,
+          pipeline_failure_handler_fn,
+          build_run_fn,
+          idea_generation_fn,
+          sandbox_lifecycle_fn,
+          pool_replenish_fn,
+      ]),
+      prefix="/api",
+  )
+
+Update pipeline_service.py start_pipeline() to send forge/pipeline.run event:
+  from app.inngest_client import forge_inngest
+  import inngest
+
+  async def start_pipeline(project_id, user_id, idea_spec) -> str:
+      pipeline_id = str(uuid4())
+      # Create pipeline run record
+      async with get_write_session() as db:
+          run = PipelineRun(id=UUID(pipeline_id), project_id=project_id,
+                            user_id=user_id, status="pending", idea_spec=idea_spec)
+          db.add(run)
+          await db.commit()
+
+      # Send Inngest event — non-blocking, returns immediately
+      await forge_inngest.send(inngest.Event(
+          name="forge/pipeline.run",
+          data={"pipeline_id": pipeline_id, "project_id": str(project_id),
+                "user_id": str(user_id), "idea_spec": idea_spec}
+      ))
+      return pipeline_id  # return immediately, do NOT await the pipeline
+
+Add similar send() calls in relevant services:
+  build_service → forge/build.run
+  idea_service → forge/idea.generate
+  sandbox_service → forge/sandbox.lifecycle
+
+After:
+  uvicorn app.main:app --reload
+  curl http://localhost:8000/api/inngest → must return Inngest introspection JSON listing all 6 functions
+  
+  Local dev verification (requires Inngest dev server running):
+    npx inngest-cli@latest dev -u http://localhost:8000/api/inngest
+    Open http://localhost:8288 → Functions tab → all 6 functions listed
+    Trigger "forge/pipeline.run" manually from the UI → watch function execute</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after the agent finishes</span></div>
+  <div class="bb"><pre><code>Review Session 4.1.
+
+1. Does backend/app/functions/inngest_functions.py exist with all 6 functions?
+   (5 jobs + 1 failure handler = 6 total)
+   grep -n "create_function\|fn_id" backend/app/functions/inngest_functions.py
+
+2. Are all 6 registered in main.py inngest_serve()?
+   grep -n "pipeline_run_fn\|build_run_fn\|idea_generation_fn\|sandbox_lifecycle_fn\|pool_replenish_fn\|pipeline_failure_handler_fn" backend/app/main.py
+
+3. Does pipeline_failure_handler_fn listen to "inngest/function.failed"?
+   grep -n "inngest/function.failed" backend/app/functions/inngest_functions.py
+   CRITICAL: without this, failed pipelines stay in 'running' status forever.
+
+4. Does pool_replenish_fn use TriggerCron (not TriggerEvent)?
+   grep -n "TriggerCron" backend/app/functions/inngest_functions.py
+
+5. Does start_pipeline() use forge_inngest.send() (not trigger_client.trigger)?
+   grep -n "forge_inngest.send\|inngest.Event" backend/app/services/pipeline_service.py
+
+6. start_pipeline() returns immediately without awaiting the Inngest function?
+   Time a test call — must return in < 200ms.
+
+7. curl http://localhost:8000/api/inngest
+   Must return JSON with "functions" array containing 6 entries, not 404.
+
+8. All helper functions use get_write_session() for DB writes?
+   grep -n "get_write_session\|get_read_session" backend/app/functions/inngest_functions.py
+
+9. grep -rn "trigger_client\|trigger_api_key\|TRIGGER_API_KEY" backend/ --include="*.py"
+   Must return zero results. Trigger.dev is gone.
+
+10. pytest tests/ -v — all pass? Show count.
+
+List every issue and confirm fixed.</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Test with Inngest dev server, then commit</span></div>
+  <div class="bb"><p class="inst">Run the dev server in a third terminal to verify all functions register correctly:</p>
+<pre><code><span class="cm"># Terminal 3 (while backend is running in Terminal 1)</span>
+<span class="pr">$</span> npx inngest-cli@latest dev -u http://localhost:8000/api/inngest
+<span class="cm"># Open http://localhost:8288 → Functions tab → verify 6 functions listed</span>
+<span class="cm"># Trigger "forge/pipeline.run" manually → watch function execute in UI</span>
+<span class="cm"># Stop with Ctrl+C when done</span>
+
+<span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 4.1: Inngest — 5 durable functions, failure handler, cron"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 4.2 -->
+<div class="sc" id="s42">
+<div class="sc-h"><span class="sc-n">4.2</span><div><div class="sc-t">End-to-end browser test</div><div class="sc-d">6 full test flows — start both servers first</div></div></div>
+<div class="sc-b">
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Start both servers BEFORE this session</span></div>
+  <div class="bb"><pre><code><span class="cm"># Terminal 1</span>
+<span class="pr">$</span> cd ~/forge/backend && uvicorn app.main:app --reload
+<span class="cm"># Terminal 2</span>
+<span class="pr">$</span> cd ~/forge/frontend && npm run dev
+<span class="cm"># Optional Terminal 3 (to watch Inngest functions execute)</span>
+<span class="pr">$</span> npx inngest-cli@latest dev -u http://localhost:8000/api/inngest</code></pre></div>
+</div>
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first. Run a complete E2E test. Fix every issue immediately.
+
+VERIFY FIRST:
+  curl http://localhost:8000/health → {"status":"ok"}
+  curl http://localhost:8000/api/inngest → returns JSON with functions array (not 404)
+  http://localhost:5173 → loads in browser
+
+FLOW 1 — Registration:
+1. Open http://localhost:5173. Screenshot. Background #04040a (dark, NOT white)?
+   If white → index.css @import not line 1. Fix immediately.
+2. Click "Start Building →" → must reach /register
+3. Register: name="Test User", email="test@example.com", password="TestPass123!"
+   Submit → must redirect to /onboarding (not stay on /register, not 500)
+4. Complete 3 onboarding steps → /dashboard
+
+FLOW 2 — Navigation:
+5. /dashboard: bg #04040a, stat cards visible, sidebar present
+6. Sidebar: Projects → loads. Ideate → loads.
+
+FLOW 3 — New Project:
+7. Click "+ New Project" → select option → enter description → pick tech → submit
+   Must reach /pipeline/:id
+
+FLOW 4 — Pipeline:
+8. /pipeline/:id: "◎ Running" badge, C-Suite grid visible, event log has entries
+   (Inngest function is running — event log should receive Redis pub/sub messages)
+   Wait 20s. Screenshot.
+
+FLOW 5 — Editor:
+9. /projects/:id/editor. Screenshot. Verify ALL:
+   - Background: #04040a (dark, NOT white or gray)
+   - Monaco with DARK theme (#04040a bg)
+   - Status bar at bottom: EXACTLY #63d9ff background, #04040a text
+   Fix anything wrong before continuing.
+10. Type in editor → ember dot on tab. Ctrl+S → network request in DevTools.
+11. Toggle preview → 310px pane appears. Annotate → cursor crosshair.
+
+FLOW 6 — Settings:
+12. /settings/ai-providers: 8 provider cards on dark background
+13. Connect OpenAI with invalid key → error in ember/red (not crash)
+
+Report each step: PASS ✓ or FAIL ✗ + fix applied. End: X passed, Y fixed.</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Commit after all fixes</span></div>
+  <div class="bb"><pre><code><span class="pr">$</span> cd ~/forge && git add . && git commit -m "Session 4.2: E2E test — all issues fixed"</code></pre></div>
+</div>
+</div></div>
+
+<!-- 4.3 -->
+<div class="sc" id="s43">
+<div class="sc-h"><span class="sc-n">4.3</span><div><div class="sc-t">Security and performance audit</div><div class="sc-d">Hardcoded secrets · IDOR ownership · N+1 queries · bundle size · React memory leaks</div></div></div>
+<div class="sc-b">
+<div class="bcp">
+  <div class="bh"><span class="badge">Copilot</span><span class="btitle">Agent mode · Opus 4.6 High · Audit only — no new features</span></div>
+  <div class="bb"><p class="inst">Paste:</p>
+<pre><code>Read AGENTS.md first. Final security and performance audit. Fix everything.
+
+SECURITY:
+1. grep -r "sk-" backend/app/ --include="*.py"
+   grep -rn 'password\s*=\s*["\x27]' backend/app/ --include="*.py" | grep -v "hashed\|test\|config\|settings"
+   grep -rn "api_key\s*=\s*[\"']" backend/app/ --include="*.py" | grep -v "env\|config\|settings\|get("
+   Zero results required.
+
+2. IDOR check — projects.py, sandbox.py, pipeline.py:
+   Pattern required: WHERE id=X AND user_id=Y (not fetch by id then check)
+
+3. Path traversal: every file path endpoint calls sanitize_path()?
+   Test: "../../etc/passwd" → 400
+
+4. JWT expiry: access tokens <= 15min, refresh tokens <= 7 days. Expired → 401.
+
+5. grep -n "boto3\|botocore\|amazonaws\|trigger_client\|TRIGGER_API_KEY" backend/app/ -r --include="*.py"
+   Zero results required. Both old services fully removed.
+
+PERFORMANCE:
+6. N+1 queries: DB query inside Python loop = bug. Fix with selectinload/joinedload.
+7. Missing indexes: alembic revision --autogenerate -m "add missing indexes" && alembic upgrade head
+8. Bundle: npm run build → any chunk > 300KB → React.lazy + dynamic import. Monaco: own lazy chunk.
+9. Memory leaks — PreviewPane, PreviewDevConsole, PipelinePage, EditorPage:
+   Every WebSocket, setInterval, window.addEventListener: cleaned up in useEffect return?
+10. TanStack Query: GET /auth/me staleTime >= 5min. Projects list >= 30s.
+
+FINAL:
+11. pytest tests/ -v --tb=short — ALL pass. Show count.
+12. npm run typecheck — zero errors.
+13. npm run build — succeeds.</code></pre></div>
+</div>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Final pre-launch checklist</span></div>
+  <div class="bb"><pre><code>1. All grep checks returned zero results?
+2. No boto3, no R2, no Trigger.dev anywhere in codebase?
+3. N+1 queries found and fixed?
+4. Memory leaks fixed?
+5. Largest bundle chunk?
+6. pytest tests/ -v — all pass, count?
+7. npm run typecheck — zero errors?
+8. npm run build — succeeds?</code></pre></div>
+</div>
+<div class="bt">
+  <div class="bh"><span class="badge">Terminal</span><span class="btitle">Final commit — FORGE complete</span></div>
+  <div class="bb"><p class="inst">Update AGENTS.md Build Status to "Phase: COMPLETE — Ready for launch". Then:</p>
+<pre><code><span class="pr">$</span> cd ~/forge && git add .
+<span class="pr">$</span> git commit -m "FORGE v1.0 COMPLETE: Supabase + Inngest stack, production ready"
+<span class="pr">$</span> git tag -a v1.0.0 -m "FORGE v1.0.0"
+<span class="pr">$</span> git push origin main --tags</code></pre>
+  <p class="ok">✓ FORGE complete. Supabase (DB + Auth + Storage) + Northflank (compute) + Inngest (jobs) + Cloudflare (preview proxy).</p>
+  </div>
+</div>
+</div></div>
+<!-- REFERENCE -->
+<hr>
+<h2 id="master-rev">Master self-review prompt</h2>
+<div class="br">
+  <div class="bh"><span class="badge">Self-Review</span><span class="btitle">Paste after any session for a thorough check</span></div>
+  <div class="bb"><pre><code>Act as a senior engineer doing a rigorous code review. Find problems.
+
+ARCHITECTURE:
+1. Read AGENTS.md. Every file match?
+2. DB reads: get_read_session()? DB writes: get_write_session()?
+3. alembic/env.py uses DATABASE_DIRECT_URL (not DATABASE_URL)?
+
+SUPABASE + INNGEST:
+4. JWT: HS256 + SUPABASE_JWT_SECRET, local decode only?
+   grep "SUPABASE_JWT_SECRET\|HS256" backend/app/middleware/auth.py
+5. Storage: supabase-py only, no boto3/R2/amazonaws?
+   grep -r "boto3\|botocore\|amazonaws\|r2.cloudflarestorage" backend/ --include="*.py"
+6. auth_service.py: register_user calls get_write_session()?
+   grep -n "get_write_session" backend/app/services/auth_service.py
+7. Inngest: functions registered in main.py inngest_serve()?
+   grep -n "inngest_serve\|pipeline_run_fn" backend/app/main.py
+8. Inngest: /api/inngest in auth middleware skip list?
+   grep -n "api/inngest" backend/app/middleware/auth.py
+9. No Trigger.dev references anywhere?
+   grep -r "trigger_client\|TRIGGER_API_KEY\|trigger.dev" backend/ --include="*.py"
+
+SECURITY:
+10. Every route: WHERE id=X AND user_id=Y (not separate)?
+11. No hardcoded secrets?
+
+TESTS AND TYPES:
+12. pytest tests/ -v — all pass?
+13. npm run typecheck — zero errors?
+
+Report every issue with file + line. Confirm each fixed.</code></pre></div>
+</div>
+
+<h2 id="model-sel">Model selection</h2>
+<table>
+<thead><tr><th>Sessions</th><th>Model</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td>1.1, 1.2, 1.3, 1.4, 1.9</td><td>Opus 4.6 High</td><td>Backend architecture, Supabase, Inngest client, security</td></tr>
+<tr><td>1.5, 1.6, 1.7, 1.8</td><td>Sonnet 4.6 High</td><td>Frontend setup, pages, components</td></tr>
+<tr><td>2.1 through 2.8</td><td>Opus 4.6 High</td><td>Pipeline, agents, reliability layers</td></tr>
+<tr><td>3.1, 3.2</td><td>Opus 4.6 High</td><td>Preview backend + Cloudflare Worker</td></tr>
+<tr><td>3.3 through 3.6</td><td>Sonnet 4.6 High</td><td>React preview components</td></tr>
+<tr><td>4.1, 4.2, 4.3</td><td>Opus 4.6 High</td><td>Inngest functions, E2E test, security audit</td></tr>
+</tbody>
+</table>
+
+<h2 id="rules">Architecture rules quick reference</h2>
+<table>
+<thead><tr><th>Rule</th><th>Check</th></tr></thead>
+<tbody>
+<tr><td>DB reads</td><td><code>get_read_session()</code></td></tr>
+<tr><td>DB writes</td><td><code>get_write_session()</code></td></tr>
+<tr><td>Alembic</td><td><code>DATABASE_DIRECT_URL</code> only — pooler breaks DDL</td></tr>
+<tr><td>JWT</td><td>HS256 + <code>SUPABASE_JWT_SECRET</code> — no network call</td></tr>
+<tr><td>Storage</td><td>supabase-py — never boto3, never R2</td></tr>
+<tr><td>Auth register</td><td>Supabase Auth + write User row to PostgreSQL</td></tr>
+<tr><td>Auth login</td><td>Call <code>get_or_create_user_on_login()</code> safety net</td></tr>
+<tr><td>Inngest trigger</td><td><code>forge_inngest.send(Event(name="forge/..."))</code></td></tr>
+<tr><td>Inngest endpoint</td><td><code>/api/inngest</code> in auth middleware skip list</td></tr>
+<tr><td>Inngest failure</td><td><code>pipeline-failure-handler</code> updates Supabase status to 'failed'</td></tr>
+<tr><td>Build agents</td><td>temperature=0, seed=42</td></tr>
+<tr><td>File coherence</td><td>ReviewAgent (agent 10) ONLY</td></tr>
+<tr><td>Northflank</td><td>Compute only</td></tr>
+</tbody>
+</table>
+
+<h2 id="debug">Troubleshooting</h2>
+<table>
+<thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>get_current_user()</code> always None</td><td>register_user skips DB write</td><td><code>grep "get_write_session" auth_service.py</code> — must be in register_user</td></tr>
+<tr><td>DB connection fails</td><td>Wrong asyncpg prefix or ssl param</td><td>Change to <code>postgresql+asyncpg://</code> and <code>?ssl=true</code></td></tr>
+<tr><td>Alembic migration fails</td><td>Using pooler URL for DDL</td><td><code>grep DATABASE_DIRECT_URL alembic/env.py</code> — must show DIRECT</td></tr>
+<tr><td>Page white background</td><td>@import not line 1 of index.css</td><td><code>head -1 frontend/src/index.css</code> — must be @import url</td></tr>
+<tr><td><code>/api/inngest</code> returns 404</td><td>inngest_serve not mounted</td><td><code>grep inngest_serve backend/app/main.py</code> — must appear</td></tr>
+<tr><td>Inngest not receiving events</td><td>/api/inngest blocked by auth middleware</td><td><code>grep "api/inngest" backend/app/middleware/auth.py</code> — must be in skip list</td></tr>
+<tr><td>Failed pipeline stays 'running'</td><td>pipeline-failure-handler not registered</td><td>Check <code>inngest/function.failed</code> function is in functions list in main.py</td></tr>
+<tr><td>Inngest dev server won't connect</td><td>Backend not running or wrong URL</td><td>Ensure <code>uvicorn app.main:app --reload</code> is running, then <code>npx inngest-cli@latest dev -u http://localhost:8000/api/inngest</code></td></tr>
+<tr><td>Inngest cron not firing locally</td><td>Dev server handles crons differently</td><td>Trigger the cron manually from localhost:8288 → Functions tab → pool-replenish → Invoke</td></tr>
+<tr><td>Storage upload fails</td><td>boto3 still in code or bucket missing</td><td>Check bucket created in Supabase Storage dashboard. No boto3 references.</td></tr>
+<tr><td>Token limit mid-session</td><td>Normal behavior</td><td>Type "continue" in same chat. Check last file for completeness after.</td></tr>
+<tr><td>Editor status bar wrong color</td><td>Tailwind not applied</td><td>Use inline <code>style={{background:'#63d9ff',color:'#04040a'}}</code> or <code>bg-[#63d9ff]</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="filelist">Complete file checklist</h2>
+<div class="cl">
+  <div class="cl-t">Backend core + Inngest</div>
+  <div class="cl-i"><div class="cb"></div>backend/requirements.txt — includes supabase>=2.4.0, inngest — no boto3, no trigger packages</div>
+  <div class="cl-i"><div class="cb"></div>backend/app/config.py — SUPABASE_*, DATABASE_URL, DATABASE_DIRECT_URL, INNGEST_EVENT_KEY, INNGEST_SIGNING_KEY</div>
+  <div class="cl-i"><div class="cb"></div>backend/app/inngest_client.py — forge_inngest = inngest.Inngest(app_id="forge", event_key, signing_key)</div>
+  <div class="cl-i"><div class="cb"></div>backend/app/functions/inngest_functions.py — all 6 functions (5 jobs + pipeline-failure-handler)</div>
+  <div class="cl-i"><div class="cb"></div>backend/app/main.py — middleware order + inngest_serve(forge_inngest, [...6 functions...]) at prefix="/api"</div>
+  <div class="cl-i"><div class="cb"></div>backend/app/middleware/auth.py — HS256 local JWT + /api/inngest in skip list</div>
+  <div class="cl-i"><div class="cb"></div>backend/app/core/database.py, security.py, redis.py</div>
+  <div class="cl-i"><div class="cb"></div>backend/app/core/sanitize.py — sanitize_path()</div>
+</div>
+<div class="cl">
+  <div class="cl-t">Supabase integration</div>
+  <div class="cl-i"><div class="cb"></div>backend/app/services/auth_service.py — Supabase Auth REST + get_write_session() on register/login</div>
+  <div class="cl-i"><div class="cb"></div>backend/app/services/storage_service.py — supabase-py, three buckets</div>
+  <div class="cl-i"><div class="cb"></div>alembic/env.py — DATABASE_DIRECT_URL (not DATABASE_URL)</div>
+  <div class="cl-i"><div class="cb"></div>frontend/src/api/supabase.ts — createClient with VITE_ vars</div>
+</div>
+<div class="cl">
+  <div class="cl-t">Database models — 18 tables</div>
+  <div class="cl-i"><div class="cb"></div>user, ai_provider (LargeBinary keys), project, pipeline_run, agent_output</div>
+  <div class="cl-i"><div class="cb"></div>build, sandbox (INDEX status), editor_session, chat_message, deployment</div>
+  <div class="cl-i"><div class="cb"></div>idea_session, idea, annotation (x_pct, y_pct), build_snapshot, preview_share</div>
+  <div class="cl-i"><div class="cb"></div>hot_fix_record, performance_report, accessibility_report, coherence_report</div>
+</div>
+<div class="cl">
+  <div class="cl-t">AI Pipeline</div>
+  <div class="cl-i"><div class="cb"></div>agents/state.py (13 fields), validators.py (G1-G12), graph.py (build_pipeline_graph + build_graph alias)</div>
+  <div class="cl-i"><div class="cb"></div>C-Suite: ceo, cto, cdo, cmo, cpo, cso, cco, cfo (asyncio.gather)</div>
+  <div class="cl-i"><div class="cb"></div>Synthesis: g3_resolver.py (always passes), synthesizer.py (G4 ≥0.85)</div>
+  <div class="cl-i"><div class="cb"></div>Build: scaffold, router, component, page, api, db, auth, style, test, review (temperature=0)</div>
+  <div class="cl-i"><div class="cb"></div>hotfix_agent.py (real impl, max 3 attempts)</div>
+</div>
+<div class="cl">
+  <div class="cl-t">Reliability layers 1–10</div>
+  <div class="cl-i"><div class="cb"></div>L1: dependency_resolver, lockfile_generator, env_contract_validator</div>
+  <div class="cl-i"><div class="cb"></div>L2: openapi_injector, zod_schema_injector, pydantic_schema_injector, db_type_injector</div>
+  <div class="cl-i"><div class="cb"></div>L3: ast_analyser, import_graph_resolver, runtime_error_predictor</div>
+  <div class="cl-i"><div class="cb"></div>L4: file_coherence_engine, barrel_validator, seam_checker (ReviewAgent only)</div>
+  <div class="cl-i"><div class="cb"></div>L5: pattern_library (30+, file_upload_supabase), api_contract_validator, type_inference_engine</div>
+  <div class="cl-i"><div class="cb"></div>L6: build_cache (Pinecone ≥0.92, only store passing), build_memory, error_boundary_injector, incremental_build</div>
+  <div class="cl-i"><div class="cb"></div>L7: wiremock_manager (finally block), stub_registry, Stripe/Resend/OpenAI/Anthropic/Twilio/SendGrid stubs</div>
+  <div class="cl-i"><div class="cb"></div>L8: visual_regression, sast_scanner, perf_budget, accessibility_audit, dead_code_detector, seed_generator</div>
+  <div class="cl-i"><div class="cb"></div>L9: hotfix_agent (3 attempts), rollback_engine, canary_deploy, migration_safety</div>
+  <div class="cl-i"><div class="cb"></div>L10: context_window_manager, css_validator, determinism_enforcer, fallback_cascade</div>
+</div>
+<div class="cl">
+  <div class="cl-t">Preview + Frontend + Context</div>
+  <div class="cl-i"><div class="cb"></div>preview_service, snapshot_service, annotation_service, file_sync_service (Supabase Storage)</div>
+  <div class="cl-i"><div class="cb"></div>workers/preview-proxy — index.ts (HS256 JWT), hmr-relay.ts (max 5 reconnects), auth.ts</div>
+  <div class="cl-i"><div class="cb"></div>frontend/src/index.css — Google Fonts @import LINE 1, CSS vars, jade-pulse keyframe</div>
+  <div class="cl-i"><div class="cb"></div>editorStore.ts — devConsoleErrors + chatVisible fields</div>
+  <div class="cl-i"><div class="cb"></div>All 22 pages — EditorPage #63d9ff status bar, no AppShell</div>
+  <div class="cl-i"><div class="cb"></div>PreviewPane, AnnotationLayer, SnapshotTimeline, PreviewDevConsole</div>
+  <div class="cl-i"><div class="cb"></div>AGENTS.md, .github/copilot-instructions.md, DESIGN_BRIEF.md</div>
+</div>
+
+<hr>
+<p style="font-size:11px;color:rgba(238,240,246,0.22);text-align:center;padding:8px 0 16px">
+  FORGE Complete Build Guide · Supabase + Inngest Stack · 19 sessions · 4 phases<br>
+  Copilot Agent · Opus 4.6 High (backend/pipeline) · Sonnet 4.6 High (frontend)
+</p>
+
+</main>
+</div>
+<div class="mob">
+  <button class="mb" onclick="document.getElementById('setup').scrollIntoView({behavior:'smooth'})">Setup</button>
+  <button class="mb" onclick="document.getElementById('p1').scrollIntoView({behavior:'smooth'})">Phase 1</button>
+  <button class="mb" onclick="document.getElementById('p2').scrollIntoView({behavior:'smooth'})">Phase 2</button>
+  <button class="mb" onclick="document.getElementById('p3').scrollIntoView({behavior:'smooth'})">Phase 3</button>
+  <button class="mb" onclick="document.getElementById('p4').scrollIntoView({behavior:'smooth'})">Phase 4</button>
+  <button class="mb" onclick="document.getElementById('master-rev').scrollIntoView({behavior:'smooth'})">Review</button>
+  <button class="mb" onclick="document.getElementById('debug').scrollIntoView({behavior:'smooth'})">Debug</button>
+  <button class="mb" onclick="document.getElementById('filelist').scrollIntoView({behavior:'smooth'})">Files</button>
+</div>
+</body>
+</html>

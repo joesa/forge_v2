@@ -29,6 +29,26 @@ export interface ChatMessage {
   pending?: boolean
 }
 
+export type SyncStepStatus = 'idle' | 'active' | 'done' | 'error'
+
+export interface SyncSteps {
+  parsing: SyncStepStatus
+  saving: SyncStepStatus
+  syncing: SyncStepStatus
+  applied: SyncStepStatus
+  live: SyncStepStatus
+  currentFile: string | null
+}
+
+const IDLE_SYNC: SyncSteps = {
+  parsing: 'idle',
+  saving: 'idle',
+  syncing: 'idle',
+  applied: 'idle',
+  live: 'idle',
+  currentFile: null,
+}
+
 interface EditorState {
   projectId: string | null
   sandboxId: string | null
@@ -53,6 +73,7 @@ interface EditorState {
   chatVisible: boolean
   chatMessages: ChatMessage[]
   chatStreaming: boolean
+  syncSteps: SyncSteps
 
   setProject: (projectId: string, sandboxId: string | null) => void
   setSession: (sessionId: string) => void
@@ -79,6 +100,9 @@ interface EditorState {
   updateLastAssistantMessage: (content: string) => void
   setChatStreaming: (streaming: boolean) => void
   clearChat: () => void
+  setSyncStep: (step: keyof Omit<SyncSteps, 'currentFile'>, status: SyncStepStatus) => void
+  setSyncFile: (file: string | null) => void
+  resetSyncSteps: () => void
 
   reset: () => void
 }
@@ -103,6 +127,7 @@ const initialState = {
   chatVisible: true,
   chatMessages: [] as ChatMessage[],
   chatStreaming: false,
+  syncSteps: { ...IDLE_SYNC } as SyncSteps,
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -184,6 +209,11 @@ export const useEditorStore = create<EditorState>((set) => ({
     }),
   setChatStreaming: (streaming) => set({ chatStreaming: streaming }),
   clearChat: () => set({ chatMessages: [], chatStreaming: false }),
+  setSyncStep: (step, status) =>
+    set((s) => ({ syncSteps: { ...s.syncSteps, [step]: status } })),
+  setSyncFile: (file) =>
+    set((s) => ({ syncSteps: { ...s.syncSteps, currentFile: file } })),
+  resetSyncSteps: () => set({ syncSteps: { ...IDLE_SYNC } }),
 
-  reset: () => set({ ...initialState, modifiedFiles: new Set() }),
+  reset: () => set({ ...initialState, modifiedFiles: new Set(), syncSteps: { ...IDLE_SYNC } }),
 }))

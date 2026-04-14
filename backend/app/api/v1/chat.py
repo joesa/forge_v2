@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 ANTHROPIC_MODELS = ["claude-sonnet-4-20250514", "claude-3-haiku-20240307"]
 # OpenAI fallback model
 OPENAI_MODEL = "gpt-4o"
-MAX_TOKENS = 4096
+MAX_TOKENS = 16384
 
 
 # ── Schemas ──────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ def _user_id(request: Request) -> UUID:
 
 
 async def _build_system_prompt(project_id: UUID, active_file: str | None, active_file_content: str | None) -> str:
-    """Build context-aware system prompt with project info."""
+    """Build context-aware system prompt with project info and file contents."""
     # Fetch project details
     async with get_read_session() as db:
         from sqlalchemy import select
@@ -65,33 +65,104 @@ async def _build_system_prompt(project_id: UUID, active_file: str | None, active
         project_ctx = f"Project: {project.name}\nDescription: {project.description or 'N/A'}\nFramework: {project.framework.value}\n"
 
     # Fetch file tree for context
+    files: list[str] = []
     file_tree = ""
     try:
         files = await storage_service.list_files_recursive(
             settings.SUPABASE_BUCKET_PROJECTS, str(project_id)
         )
         if files:
-            file_tree = "Project files:\n" + "\n".join(f"  {f}" for f in files[:50])
+            tree_lines = [f"  {f}" for f in sorted(files[:100])]
+            file_tree = f"Project files ({len(files)} total):\n" + "\n".join(tree_lines)
+            if len(files) > 100:
+                file_tree += f"\n  ... and {len(files) - 100} more files"
     except Exception:
         pass
 
+    # Fetch contents of key source files so the AI can read them without asking the user
+    SOURCE_EXTS = {
+        ".ts", ".tsx", ".js", ".jsx", ".json", ".css", ".html",
+        ".md", ".mjs", ".cjs", ".env.example",
+    }
+    SKIP_PATTERNS = {"node_modules/", "dist/", ".next/", "build/", ".git/", "lock"}
+    MAX_FILE_SIZE = 8_000  # chars per file
+    MAX_TOTAL_CONTEXT = 80_000  # total chars for all file contents
+    bucket = settings.SUPABASE_BUCKET_PROJECTS
+    prefix = str(project_id)
+
+    file_contents_ctx = ""
+    total_chars = 0
+    files_included = 0
+
+    # Prioritize: config/route files first, then components/pages, then the rest
+    def _priority(path: str) -> int:
+        lower = path.lower()
+        if any(k in lower for k in ("route", "app.tsx", "app.jsx", "main.ts", "main.tsx", "index.ts", "index.tsx", "package.json", "tsconfig")):
+            return 0
+        if any(k in lower for k in ("layout", "config", "vite")):
+            return 1
+        if any(k in lower for k in ("page", "component", "hook")):
+            return 2
+        return 3
+
+    source_files = [
+        f for f in sorted(files)
+        if any(f.endswith(ext) for ext in SOURCE_EXTS)
+        and not any(skip in f for skip in SKIP_PATTERNS)
+    ]
+    source_files.sort(key=_priority)
+
+    contents_parts: list[str] = []
+    for rel_path in source_files:
+        if total_chars >= MAX_TOTAL_CONTEXT:
+            break
+        try:
+            raw = await storage_service.download_file(bucket, f"{prefix}/{rel_path}")
+            text = raw.decode("utf-8", errors="replace")
+            if len(text) > MAX_FILE_SIZE:
+                text = text[:MAX_FILE_SIZE] + f"\n... (truncated, {len(raw)} bytes total)"
+            contents_parts.append(f"### {rel_path}\n```\n{text}\n```\n")
+            total_chars += len(text)
+            files_included += 1
+        except Exception:
+            continue
+
+    if contents_parts:
+        file_contents_ctx = (
+            f"\n## Project Source Files ({files_included} files loaded)\n"
+            "You have access to all the source files below. "
+            "Do NOT ask the user to open or share files — read them here.\n\n"
+            + "\n".join(contents_parts)
+        )
+
     active_ctx = ""
     if active_file and active_file_content:
-        active_ctx = f"\nCurrently open file: {active_file}\n```\n{active_file_content[:3000]}\n```\n"
+        active_ctx = f"\nCurrently open file (user is viewing): {active_file}\n```\n{active_file_content[:5000]}\n```\n"
 
     return (
         "You are Forge AI, an expert full-stack developer assistant embedded in the Forge IDE. "
         "You help users modify, debug, and improve their web applications.\n\n"
         f"{project_ctx}"
         f"{file_tree}"
+        f"{file_contents_ctx}"
         f"{active_ctx}\n"
-        "Guidelines:\n"
-        "- When suggesting code changes, wrap each file change in a JSON block like:\n"
-        '  ```forge-edit\n{"path": "src/file.tsx", "content": "full file content...", "description": "what changed"}\n```\n'
-        "- Always provide complete file contents in edits, not partial diffs.\n"
-        "- Use modern best practices: ESM imports, TypeScript, Tailwind CSS.\n"
-        "- Keep responses concise and actionable.\n"
-        "- If the user asks about the project structure, reference the file tree above."
+        "## Code Edit Rules\n"
+        "When making code changes, wrap EACH file change in a JSON block like:\n"
+        '```forge-edit\n{"path": "src/file.tsx", "content": "full file content...", "description": "what changed"}\n```\n\n'
+        "CRITICAL edit rules:\n"
+        "1. Always provide the COMPLETE file content — never partial diffs or snippets.\n"
+        "2. The 'path' must be relative to project root (e.g. 'src/routes.tsx', not '/app/src/routes.tsx').\n"
+        "3. Before editing a file, consider its IMPORTS and EXPORTS. If you rename or move an export, "
+        "you MUST also update every file that imports it. Check the file tree and file contents above.\n"
+        "4. If your change adds a new import, verify the imported file/module exists in the file tree.\n"
+        "5. Preserve ALL existing functionality unless the user explicitly asked to remove it.\n"
+        "6. Use modern best practices: ESM imports, TypeScript, Tailwind CSS.\n"
+        "7. Keep responses concise. Explain what you changed BEFORE the forge-edit block.\n"
+        "8. If the user asks about the project structure, reference the file tree and source files above.\n"
+        "9. You have full access to all project source files — NEVER ask the user to open or share a file. "
+        "Read the contents from the context above and make your edits directly.\n"
+        "10. When adding routes, components, or pages — ensure they are properly imported AND "
+        "registered in the router/layout that renders them.\n"
     )
 
 

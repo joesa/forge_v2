@@ -46,7 +46,7 @@ async def _get_project_sandbox_id(project_id: UUID, user_id: UUID) -> UUID | Non
         result = await db.execute(
             select(Sandbox.id).where(
                 Sandbox.project_id == project_id,
-                Sandbox.status == SandboxStatus.claimed,
+                Sandbox.status.in_([SandboxStatus.warm, SandboxStatus.claimed, SandboxStatus.building]),
             ).limit(1)
         )
         row = result.scalar_one_or_none()
@@ -195,11 +195,22 @@ async def put_file_content(project_id: UUID, request: Request, body: FileContent
     url = await project_service.put_file(
         project_id, uid, body.path, body.content.encode("utf-8"), "text/plain"
     )
-    # Sync to sandbox (fire-and-forget — don't block the save)
+    # Sync to sandbox
+    sync_result = None
     sandbox_id = await _get_project_sandbox_id(project_id, uid)
     if sandbox_id:
-        await file_sync_service.sync_file(sandbox_id, body.path, body.content)
-    return {"url": url}
+        sync_result = await file_sync_service.sync_file(sandbox_id, body.path, body.content)
+    else:
+        import logging
+        logging.getLogger(__name__).warning(
+            "put_file_content: no active sandbox for project=%s — file saved but not synced", project_id
+        )
+    synced = sync_result.get("receivers", 0) > 0 if sync_result else False
+    return {
+        "url": url,
+        "synced": synced,
+        "sync_method": sync_result.get("method") if sync_result else None,
+    }
 
 
 @router.put("/{project_id}/files")

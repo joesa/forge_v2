@@ -34,4 +34,5 @@ class PipelineRun(TimestampMixin, Base):
     )
     current_stage: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     idea_spec: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    stage_states: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     errors: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

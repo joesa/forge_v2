@@ -69,6 +69,11 @@ async function pullFiles() {
     }
     const files = flattenTree(tree);
 
+    if (files.length === 0) {
+      console.warn("[forge-agent] No files returned from API");
+      return 0;
+    }
+
     // Download each file
     let pulled = 0;
     for (const file of files) {
@@ -84,18 +89,40 @@ async function pullFiles() {
 
       const data = await contentRes.json();
       const fullPath = join(APP_DIR, file.path);
+
+      // Security: prevent path traversal
+      if (!fullPath.startsWith(APP_DIR + "/")) {
+        console.warn(`[forge-agent] Blocked path traversal: ${file.path}`);
+        continue;
+      }
+
       mkdirSync(dirname(fullPath), { recursive: true });
       writeFileSync(fullPath, data.content || "", "utf-8");
       pulled++;
     }
 
     console.log(`[forge-agent] Pulled ${pulled} files`);
+    return pulled;
   } catch (err) {
     console.error("[forge-agent] Pull failed:", err.message);
     status = "error";
     lastError = err.message;
     throw err;
   }
+}
+
+/**
+ * Retry pullFiles until files are available.
+ * The build pipeline may still be uploading when the sandbox boots.
+ */
+async function pullFilesWithRetry(maxAttempts = 20, intervalMs = 6000) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const count = await pullFiles();
+    if (count > 0) return count;
+    console.log(`[forge-agent] No files yet (attempt ${attempt}/${maxAttempts}), retrying in ${intervalMs / 1000}s...`);
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  throw new Error(`No files available after ${maxAttempts} attempts`);
 }
 
 // ── 2. Install dependencies ─────────────────────────────────────
@@ -146,7 +173,7 @@ function startDevServer() {
 
   // Detect framework — read package.json scripts
   let startCmd = "npx";
-  let startArgs = ["vite", "--host", "0.0.0.0", "--port", String(DEV_SERVER_PORT)];
+  let startArgs = ["vite", "--host", "0.0.0.0", "--port", String(DEV_SERVER_PORT), "--allowedHosts", "all"];
 
   const pkgPath = join(APP_DIR, "package.json");
   if (existsSync(pkgPath)) {
@@ -195,37 +222,63 @@ function startDevServer() {
 
 // ── 4. Redis file sync subscriber ───────────────────────────────
 
+/**
+ * Write a single file safely to the sandbox filesystem.
+ * Shared by both Redis subscriber and HTTP /write-file endpoint.
+ */
+function writeSandboxFile(filePath, content) {
+  const fullPath = join(APP_DIR, filePath);
+
+  // Security: prevent path traversal
+  if (!fullPath.startsWith(APP_DIR + "/")) {
+    console.warn(`[forge-agent] Blocked path traversal: ${filePath}`);
+    return false;
+  }
+
+  mkdirSync(dirname(fullPath), { recursive: true });
+  writeFileSync(fullPath, content, "utf-8");
+  console.log(`[forge-agent] Synced: ${filePath}`);
+  return true;
+}
+
 function subscribeToFileSync() {
   if (!REDIS_URL) {
     console.warn("[forge-agent] No REDIS_URL — file sync disabled");
     return;
   }
 
-  const sub = new Redis(REDIS_URL);
+  const sub = new Redis(REDIS_URL, {
+    retryStrategy(times) {
+      const delay = Math.min(times * 200, 5000);
+      console.log(`[forge-agent] Redis reconnecting (attempt ${times}, delay ${delay}ms)`);
+      return delay;
+    },
+    maxRetriesPerRequest: null,
+  });
   const channel = `file_sync:${SANDBOX_ID}`;
 
-  sub.subscribe(channel, (err) => {
-    if (err) {
-      console.error("[forge-agent] Redis subscribe error:", err.message);
-      return;
-    }
-    console.log(`[forge-agent] Subscribed to ${channel}`);
+  function doSubscribe() {
+    sub.subscribe(channel, (err) => {
+      if (err) {
+        console.error("[forge-agent] Redis subscribe error:", err.message);
+        return;
+      }
+      console.log(`[forge-agent] Subscribed to ${channel}`);
+    });
+  }
+
+  doSubscribe();
+
+  // Re-subscribe after reconnect — ioredis drops subscriptions on reconnect
+  sub.on("ready", () => {
+    console.log("[forge-agent] Redis connection ready — re-subscribing");
+    doSubscribe();
   });
 
   sub.on("message", (_ch, message) => {
     try {
       const { path: filePath, content } = JSON.parse(message);
-      const fullPath = join(APP_DIR, filePath);
-
-      // Security: prevent path traversal
-      if (!fullPath.startsWith(APP_DIR + "/")) {
-        console.warn(`[forge-agent] Blocked path traversal: ${filePath}`);
-        return;
-      }
-
-      mkdirSync(dirname(fullPath), { recursive: true });
-      writeFileSync(fullPath, content, "utf-8");
-      console.log(`[forge-agent] Synced: ${filePath}`);
+      writeSandboxFile(filePath, content);
     } catch (err) {
       console.error("[forge-agent] File sync error:", err.message);
     }
@@ -243,7 +296,10 @@ function startHealthServer() {
     const url = new URL(req.url, `http://localhost:${AGENT_PORT}`);
 
     if (url.pathname === "/health") {
-      const healthy = status === "running";
+      // Return 200 during boot phases (pulling, installing) so Northflank
+      // doesn't kill the container while we're waiting for files. Only
+      // report unhealthy on actual error states.
+      const healthy = status !== "error";
       res.writeHead(healthy ? 200 : 503, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         status,
@@ -264,6 +320,63 @@ function startHealthServer() {
         dev_server_running: devServerProcess !== null && devServerProcess.exitCode === null,
         error: lastError || undefined,
       }));
+      return;
+    }
+
+    // Restart: re-pull files, re-install deps, restart dev server
+    if (url.pathname === "/restart" && req.method === "POST") {
+      console.log("[forge-agent] Restart requested");
+      res.writeHead(202, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, message: "Restarting" }));
+
+      // Run restart asynchronously so the response returns immediately
+      (async () => {
+        try {
+          // Kill existing dev server if running
+          if (devServerProcess && devServerProcess.exitCode === null) {
+            console.log("[forge-agent] Killing existing dev server");
+            devServerProcess.kill("SIGTERM");
+            devServerProcess = null;
+          }
+
+          await pullFiles();
+          await npmInstall();
+          startDevServer();
+          console.log("[forge-agent] Restart complete — dev server on :3000");
+        } catch (err) {
+          console.error("[forge-agent] Restart failed:", err.message);
+          status = "error";
+          lastError = err.message;
+        }
+      })();
+      return;
+    }
+
+    // HTTP fallback for file sync — used when Redis pub/sub has 0 receivers
+    if (url.pathname === "/write-file" && req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", () => {
+        try {
+          const { path: filePath, content } = JSON.parse(body);
+          if (!filePath || content === undefined) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "path and content required" }));
+            return;
+          }
+          const ok = writeSandboxFile(filePath, content);
+          if (ok) {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true, path: filePath }));
+          } else {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Path traversal blocked" }));
+          }
+        } catch (err) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
       return;
     }
 
@@ -290,7 +403,7 @@ async function main() {
   startHealthServer();
 
   try {
-    await pullFiles();
+    await pullFilesWithRetry();
     await npmInstall();
     startDevServer();
     subscribeToFileSync();
@@ -299,7 +412,7 @@ async function main() {
     console.error("[forge-agent] Boot failed:", err.message);
     status = "error";
     lastError = err.message;
-    // Don't exit — keep health endpoint running so we can debug
+    // Don't exit — keep health endpoint running so /restart can recover
   }
 }
 

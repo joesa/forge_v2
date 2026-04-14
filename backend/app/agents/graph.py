@@ -54,9 +54,35 @@ from app.services.snapshot_service import capture_snapshot
 from app.services.storage_service import upload_file
 from app.core.database import get_write_session
 from app.models.build import Build, BuildStatus
+from app.models.pipeline_run import PipelineRun
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# ── Stage persistence ───────────────────────────────────────────
+
+async def _persist_stage(state: PipelineState, stage: int, status: str) -> None:
+    """Persist stage completion status to PipelineRun so frontend can catch up on missed WS events."""
+    pipeline_id = state.get("pipeline_id")
+    if not pipeline_id:
+        return
+    try:
+        async with get_write_session() as db:
+            from sqlalchemy import select
+            result = await db.execute(
+                select(PipelineRun).where(PipelineRun.id == uuid.UUID(pipeline_id))
+            )
+            run = result.scalar_one_or_none()
+            if run:
+                run.current_stage = stage
+                stages = run.stage_states or {}
+                stages[str(stage)] = status
+                run.stage_states = stages
+                if status == "failed":
+                    run.errors = state.get("errors", [])
+    except Exception as e:
+        logger.warning("Failed to persist stage %d status: %s", stage, e)
 
 
 # ── Summary extraction for C-Suite cards ────────────────────────
@@ -157,30 +183,130 @@ async def input_layer(state: PipelineState) -> PipelineState:
     await _publish(state, 1, "running", "Validating input")
     state["current_stage"] = 1
 
-    g1 = validate_g1(state)
-    state.setdefault("gate_results", {})["g1"] = g1
-    if not g1["passed"]:
-        state.setdefault("errors", []).append(g1["reason"])
-        await _publish(state, 1, "failed", g1["reason"])
-        return state
+    try:
+        g1 = validate_g1(state)
+        state.setdefault("gate_results", {})["g1"] = g1
+        if not g1["passed"]:
+            # Missing idea_spec is recoverable — create a minimal one from whatever we have
+            logger.warning("G1 failed: %s — creating minimal idea_spec", g1["reason"])
+            if not state.get("idea_spec"):
+                state["idea_spec"] = {"description": "Application", "framework": "vite_react", "name": "App"}
+            g1 = {"passed": True, "reason": "idea_spec recovered"}
+            state["gate_results"]["g1"] = g1
 
-    # Layer 1: Env contract validation
-    idea_spec = state.get("idea_spec", {})
-    framework = idea_spec.get("framework", "vite_react")
-    env_vars = idea_spec.get("env_vars", {})
-    env_result = validate_env_contract(framework, env_vars)
-    state.setdefault("gate_results", {})["env_contract"] = env_result
-    if not env_result["passed"]:
-        # Inject missing vars with empty placeholders so build can proceed
-        for var in env_result["missing"]:
-            env_vars[var] = ""
-        idea_spec["env_vars"] = env_vars
+        # Layer 1: Env contract validation
+        idea_spec = state.get("idea_spec", {})
+        framework = idea_spec.get("framework", "vite_react")
+        env_vars = idea_spec.get("env_vars", {})
+        env_result = validate_env_contract(framework, env_vars)
+        state.setdefault("gate_results", {})["env_contract"] = env_result
+        if not env_result["passed"]:
+            for var in env_result.get("missing", []):
+                env_vars[var] = ""
+            idea_spec["env_vars"] = env_vars
 
-    await _publish(state, 1, "completed", "Input validated", detail={
-        "idea_spec": idea_spec,
-        "gate_g1": g1,
-        "env_contract": env_result,
-    })
+        # ── Design Architect ─────────────────────────────────────
+        # Feed the user's idea through the Design Architect to generate
+        # a full app structure, design system, and builder prompt.
+        await _publish(state, 1, "running", "Running Design Architect…")
+
+        from app.agents.design_architect import run_design_architect
+        design_output = await run_design_architect(
+            idea=idea_spec.get("description", ""),
+            name=idea_spec.get("name", ""),
+            framework=framework,
+        )
+
+        # Store the full design architecture output
+        state["design_architecture"] = design_output
+
+        # Enrich idea_spec with the Design Architect's structured output
+        # The builder_prompt becomes the core specification for downstream agents
+        if design_output.get("builder_prompt"):
+            idea_spec["builder_prompt"] = design_output["builder_prompt"]
+        if design_output.get("product_overview"):
+            overview = design_output["product_overview"]
+            idea_spec.setdefault("name", overview.get("name", ""))
+            idea_spec["product_type"] = overview.get("type", "")
+            idea_spec["target_audience"] = overview.get("target_audience", "")
+            idea_spec["key_features"] = overview.get("key_features", [])
+        if design_output.get("design_tokens"):
+            idea_spec["design_tokens"] = design_output["design_tokens"]
+        if design_output.get("pages"):
+            idea_spec["pages"] = design_output["pages"]
+        if design_output.get("component_library"):
+            idea_spec["component_library"] = design_output["component_library"]
+        if design_output.get("entities"):
+            idea_spec["entities"] = design_output["entities"]
+        if design_output.get("dependencies"):
+            idea_spec["dependencies"] = design_output["dependencies"]
+        if design_output.get("dev_dependencies"):
+            idea_spec["dev_dependencies"] = design_output["dev_dependencies"]
+        if design_output.get("interactions"):
+            idea_spec["interactions"] = design_output["interactions"]
+        if design_output.get("layout"):
+            idea_spec["layout"] = design_output["layout"]
+        if design_output.get("design_framework"):
+            idea_spec["design_framework"] = design_output["design_framework"]
+
+        state["idea_spec"] = idea_spec
+
+    except Exception as e:
+        # Input layer MUST NOT fail — log and continue with whatever state we have
+        logger.exception("Input layer unexpected error (non-fatal): %s", e)
+        g1 = {"passed": True, "reason": f"auto-recovered from error: {e}"}
+        state.setdefault("gate_results", {})["g1"] = g1
+
+    # ── Build rich detail for frontend display ───────────────────
+    da = state.get("design_architecture", {})
+    detail: dict = {
+        "gate_g1": state.get("gate_results", {}).get("g1", {}),
+        "env_contract": state.get("gate_results", {}).get("env_contract", {}),
+    }
+
+    # Product overview
+    if da.get("product_overview"):
+        detail["product_overview"] = da["product_overview"]
+
+    # Design framework & inspiration
+    if da.get("design_framework"):
+        detail["design_framework"] = da["design_framework"]
+
+    # Design tokens — show colors as a summary
+    if da.get("design_tokens"):
+        tokens = da["design_tokens"]
+        detail["design_tokens"] = {
+            "colors": tokens.get("colors", {}),
+            "typography": tokens.get("typography", {}),
+            "spacing": tokens.get("spacing", {}),
+        }
+
+    # Pages with full detail
+    if da.get("pages"):
+        detail["pages"] = da["pages"]
+
+    # Component library
+    if da.get("component_library"):
+        detail["component_library"] = [
+            {"name": c.get("name", ""), "purpose": c.get("purpose", "")}
+            for c in da["component_library"][:20]
+        ]
+
+    # Entities
+    if da.get("entities"):
+        detail["entities"] = da["entities"]
+
+    # Interactions
+    if da.get("interactions"):
+        detail["interactions"] = da["interactions"]
+
+    # Builder prompt (truncated for display)
+    bp = da.get("builder_prompt", "")
+    if bp:
+        detail["builder_prompt"] = bp[:500] + ("…" if len(bp) > 500 else "")
+
+    await _persist_stage(state, 1, "done")
+    await _publish(state, 1, "completed", "Design architecture ready", detail=detail)
     return state
 
 
@@ -223,13 +349,35 @@ async def csuite_analysis(state: PipelineState) -> PipelineState:
     g3 = validate_g3(state)
     state.setdefault("gate_results", {})["g3"] = g3
 
-    # Build a summary of each agent's output for the stage detail
-    agent_summaries = {}
+    # Build rich summaries of each agent's output for the stage detail
+    agent_details = []
+    role_map = {a.name: a for a in _CSUITE_AGENTS}
+    role_labels = {
+        "ceo": "CEO — Business Strategy", "cto": "CTO — Architecture",
+        "cdo": "CDO — Design", "cmo": "CMO — Market Strategy",
+        "cpo": "CPO — Product", "cso": "CSO — Security",
+        "cco": "CCO — Quality", "cfo": "CFO — Finance",
+    }
     for name, output in resolved_outputs.items():
-        agent_summaries[name] = _extract_summary(name, output) or "Analysis complete"
+        summary = _extract_summary(name, output)
+        # Extract key decisions/recommendations from agent output
+        highlights = []
+        if isinstance(output, dict):
+            for k, v in output.items():
+                if isinstance(v, str) and len(v) > 10:
+                    highlights.append(v[:200])
+                elif isinstance(v, list) and v:
+                    highlights.append(", ".join(str(x) for x in v[:5]))
+                if len(highlights) >= 3:
+                    break
+        agent_details.append({
+            "agent": role_labels.get(name, name),
+            "summary": summary or "Analysis complete",
+            "highlights": highlights[:3],
+        })
+    await _persist_stage(state, 2, "done")
     await _publish(state, 2, "completed", "C-suite analysis done", detail={
-        "agents_run": len(resolved_outputs),
-        "agent_summaries": agent_summaries,
+        "agents": agent_details,
         "gate_g2": g2,
         "gate_g3": g3,
         "conflict_resolutions": resolutions,
@@ -259,6 +407,7 @@ async def synthesis(state: PipelineState) -> PipelineState:
     state.setdefault("gate_results", {})["g4"] = g4
     if not g4["passed"]:
         state.setdefault("errors", []).append(g4["reason"])
+        await _persist_stage(state, 3, "failed")
         await _publish(state, 3, "failed", g4["reason"])
         return state
 
@@ -267,18 +416,30 @@ async def synthesis(state: PipelineState) -> PipelineState:
     idea_spec = state.get("idea_spec", {})
     state["comprehensive_plan"] = await flatten_plan(plan, idea_spec)
 
-    # Extract key plan sections for detail display
-    plan_summary = {}
+    # Extract rich plan sections for detail display
+    plan_detail: dict = {}
     if isinstance(state.get("comprehensive_plan"), dict):
         cp = state["comprehensive_plan"]
         for key in ["pages", "entities", "features", "components", "api_routes"]:
             val = cp.get(key)
-            if isinstance(val, list):
-                plan_summary[key] = f"{len(val)} items"
+            if isinstance(val, list) and val:
+                # Include actual items — extract name/description for each
+                items = []
+                for item in val[:20]:  # cap at 20 per category
+                    if isinstance(item, dict):
+                        items.append({
+                            k: v for k, v in item.items()
+                            if k in ("name", "description", "route", "path", "method", "type", "fields")
+                            and v
+                        } or item)
+                    else:
+                        items.append(item)
+                plan_detail[key] = items
             elif val is not None:
-                plan_summary[key] = val
+                plan_detail[key] = val
+    await _persist_stage(state, 3, "done")
     await _publish(state, 3, "completed", "Synthesis done", detail={
-        "plan_overview": plan_summary,
+        **plan_detail,
         "gate_g4": g4,
     })
     return state
@@ -316,13 +477,35 @@ async def spec_layer(state: PipelineState) -> PipelineState:
     state.setdefault("spec_outputs", {})["ts_interfaces"] = ts_interfaces
     state.setdefault("spec_outputs", {})["model_defs"] = model_defs
 
-    await _publish(state, 4, "completed", "Specs generated", detail={
-        "openapi_endpoints": len(openapi_spec.get("paths", {})) if isinstance(openapi_spec, dict) else 0,
-        "model_defs": list(model_defs.keys()) if isinstance(model_defs, dict) else [],
-        "pydantic_models": bool(pydantic_code),
-        "zod_schemas": bool(zod_code),
-        "ts_interfaces": bool(ts_interfaces),
-    })
+    # Build rich detail for spec layer
+    spec_detail: dict = {}
+
+    # OpenAPI: show actual routes with methods
+    if isinstance(openapi_spec, dict) and openapi_spec.get("paths"):
+        routes = []
+        for path, methods in list(openapi_spec["paths"].items())[:25]:
+            for method in methods:
+                if method.upper() in ("GET", "POST", "PUT", "DELETE", "PATCH"):
+                    summary = methods[method].get("summary", "") if isinstance(methods[method], dict) else ""
+                    routes.append({"method": method.upper(), "path": path, "summary": summary})
+        spec_detail["api_routes"] = routes
+
+    # Models: show model names with their fields
+    if isinstance(model_defs, dict) and model_defs:
+        models = []
+        for name, defn in list(model_defs.items())[:15]:
+            fields = list(defn.keys())[:8] if isinstance(defn, dict) else []
+            models.append({"name": name, "fields": fields})
+        spec_detail["data_models"] = models
+
+    spec_detail["generated_schemas"] = {
+        "pydantic": "✓ Generated" if pydantic_code else "—",
+        "zod": "✓ Generated" if zod_code else "—",
+        "typescript_interfaces": "✓ Generated" if ts_interfaces else "—",
+    }
+
+    await _persist_stage(state, 4, "done")
+    await _publish(state, 4, "completed", "Specs generated", detail=spec_detail)
     return state
 
 
@@ -331,18 +514,165 @@ async def bootstrap(state: PipelineState) -> PipelineState:
     await _publish(state, 5, "running", "Building manifest")
     state["current_stage"] = 5
 
-    # BuildManifest (placeholder)
-    state["build_manifest"] = {"files": [], "dependencies": []}
+    plan = state.get("comprehensive_plan", {})
+    spec_outputs = state.get("spec_outputs", {})
+    idea_spec = state.get("idea_spec", {})
+    framework = idea_spec.get("framework", "vite_react")
+
+    # ── Derive the full file tree from plan ──────────────────────
+    file_tree: list[dict] = []  # [{path, type, description?}]
+
+    # Config files every project gets
+    config_files = [
+        "package.json", "tsconfig.json", "vite.config.ts",
+        "tailwind.config.ts", "postcss.config.js", "index.html",
+        "src/main.tsx", "src/App.tsx", "src/index.css",
+        "src/lib/supabase.ts", "src/lib/utils.ts",
+    ]
+    if framework == "nextjs":
+        config_files = [
+            "package.json", "tsconfig.json", "next.config.js",
+            "tailwind.config.ts", "postcss.config.js",
+            "src/app/layout.tsx", "src/app/page.tsx", "src/app/globals.css",
+            "src/lib/supabase.ts", "src/lib/utils.ts",
+        ]
+    for cf in config_files:
+        file_tree.append({"path": cf, "type": "config"})
+
+    # Pages → route files
+    pages = plan.get("pages", [])
+    if isinstance(pages, list):
+        for page in pages:
+            if isinstance(page, dict):
+                comp = page.get("component") or page.get("name", "Page")
+                route = page.get("path", "/")
+                desc = page.get("description", "")
+                if framework == "nextjs":
+                    # Next.js app router convention
+                    slug = route.strip("/") or ""
+                    path = f"src/app/{slug}/page.tsx" if slug else "src/app/page.tsx"
+                else:
+                    path = f"src/pages/{comp}.tsx"
+                file_tree.append({"path": path, "type": "page", "route": route, "description": desc[:100]})
+
+    # Components → component files
+    components = plan.get("components", [])
+    if isinstance(components, list):
+        for comp in components:
+            if isinstance(comp, dict):
+                name = comp.get("name", "Component")
+                desc = comp.get("description", "")
+                file_tree.append({"path": f"src/components/{name}.tsx", "type": "component", "description": desc[:100]})
+
+    # Entities → type files
+    entities = plan.get("entities", [])
+    if isinstance(entities, list):
+        for entity in entities:
+            if isinstance(entity, dict):
+                name = entity.get("name", "Entity")
+                table = entity.get("table", name.lower() + "s")
+                fields = entity.get("fields", [])
+                field_names = [f.get("name", "") for f in fields if isinstance(f, dict)][:8]
+                file_tree.append({
+                    "path": f"src/types/{name.lower()}.ts",
+                    "type": "entity",
+                    "table": table,
+                    "fields": field_names,
+                })
+
+    # ── Dependencies ─────────────────────────────────────────────
+    deps = plan.get("dependencies", {})
+    dev_deps = plan.get("dev_dependencies", {})
+    if not isinstance(deps, dict):
+        deps = {}
+    if not isinstance(dev_deps, dict):
+        dev_deps = {}
+
+    # Ensure core deps exist
+    core_runtime = {"react": "^18.3.1", "react-dom": "^18.3.1", "react-router-dom": "^6.26.0",
+                    "@supabase/supabase-js": "^2.45.0", "tailwindcss": "^3.4.0"}
+    if framework == "nextjs":
+        core_runtime["next"] = "^14.2.0"
+    for k, v in core_runtime.items():
+        deps.setdefault(k, v)
+
+    core_dev = {"typescript": "^5.4.0", "vite": "^5.4.0", "@vitejs/plugin-react": "^4.3.0",
+                "@types/react": "^18.3.0", "@types/react-dom": "^18.3.0"}
+    for k, v in core_dev.items():
+        dev_deps.setdefault(k, v)
+
+    # Add deps from spec layer
+    model_defs = spec_outputs.get("model_defs", {})
+    if model_defs:
+        deps.setdefault("zod", "^3.23.0")
+    if spec_outputs.get("openapi_spec"):
+        deps.setdefault("axios", "^1.7.0")
+
+    # ── Features summary ─────────────────────────────────────────
+    features = plan.get("features", [])
+    feature_summary: list[dict] = []
+    if isinstance(features, list):
+        for feat in features[:15]:
+            if isinstance(feat, dict):
+                feature_summary.append({
+                    "name": feat.get("name", "Feature"),
+                    "page": feat.get("page", ""),
+                    "crud": feat.get("crud_ops", []),
+                })
+
+    state["build_manifest"] = {
+        "files": [f["path"] for f in file_tree],
+        "file_tree": file_tree,
+        "dependencies": deps,
+        "dev_dependencies": dev_deps,
+        "features": feature_summary,
+    }
 
     g6 = validate_g6(state)
     state.setdefault("gate_results", {})["g6"] = g6
 
-    # Cache check (placeholder)
+    # ── Rich detail for frontend display ─────────────────────────
+    detail: dict = {"gate_g6": g6}
 
-    await _publish(state, 5, "completed", "Manifest ready", detail={
-        "gate_g6": g6,
-        "manifest": state.get("build_manifest", {}),
-    })
+    # Project structure — group by type
+    detail["project_structure"] = {
+        "config_files": [f["path"] for f in file_tree if f["type"] == "config"],
+        "pages": [{
+            "name": f["path"].rsplit("/", 1)[-1],
+            "path": f["path"],
+            "route": f.get("route", ""),
+            "description": f.get("description", ""),
+        } for f in file_tree if f["type"] == "page"],
+        "components": [{
+            "name": f["path"].rsplit("/", 1)[-1],
+            "path": f["path"],
+            "description": f.get("description", ""),
+        } for f in file_tree if f["type"] == "component"],
+        "entities": [{
+            "name": f["path"].rsplit("/", 1)[-1],
+            "path": f["path"],
+            "table": f.get("table", ""),
+            "fields": f.get("fields", []),
+        } for f in file_tree if f["type"] == "entity"],
+    }
+
+    detail["dependencies"] = deps
+    detail["dev_dependencies"] = dev_deps
+
+    if feature_summary:
+        detail["features"] = feature_summary
+
+    detail["stats"] = {
+        "total_files": str(len(file_tree)),
+        "pages": str(len([f for f in file_tree if f["type"] == "page"])),
+        "components": str(len([f for f in file_tree if f["type"] == "component"])),
+        "entities": str(len([f for f in file_tree if f["type"] == "entity"])),
+        "runtime_deps": str(len(deps)),
+        "dev_deps": str(len(dev_deps)),
+    }
+
+    await _persist_stage(state, 5, "done")
+    await _publish(state, 5, "completed", "Manifest ready", detail=detail)
     return state
 
 
@@ -498,11 +828,20 @@ async def build(state: PipelineState) -> PipelineState:
         ready = await wait_for_sandbox_ready(sandbox_id, timeout=120)
         if ready:
             logger.info("Sandbox ready: %s", sandbox_id)
+            # Tell sandbox to re-pull files and restart dev server — files are
+            # already in storage at this point so the pull will succeed.
+            from app.services.file_sync_service import restart_sandbox
+            restarted = await restart_sandbox(uuid.UUID(sandbox_id))
+            if restarted:
+                logger.info("Sandbox restart triggered for %s", sandbox_id)
+            else:
+                logger.warning("Sandbox restart failed for %s — user may need to reload", sandbox_id)
         else:
             logger.warning("Sandbox not ready after timeout: %s", sandbox_id)
     except Exception as e:
         logger.error("Sandbox provisioning failed (non-fatal): %s", e)
 
+    await _persist_stage(state, 6, "done")
     await _publish(state, 6, "completed", "Build complete", detail={
         "files_generated": len(state.get("generated_files", {})),
         "file_list": sorted(state.get("generated_files", {}).keys()),
@@ -517,6 +856,7 @@ async def build(state: PipelineState) -> PipelineState:
 async def error_handler(state: PipelineState) -> PipelineState:
     errors = state.get("errors") or []
     stage = state.get("current_stage", 0)
+    await _persist_stage(state, stage, "failed")
     await _publish(state, stage, "failed", f"Pipeline failed: {'; '.join(errors)}")
     return state
 

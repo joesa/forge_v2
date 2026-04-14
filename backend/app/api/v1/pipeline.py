@@ -54,6 +54,15 @@ async def get_stages(request: Request, pipeline_id: UUID):
     return await pipeline_service.get_pipeline_stages(pipeline_id, _user_id(request))
 
 
+# ── POST /api/v1/pipeline/{id}/retry ────────────────────────────
+
+@router.post("/{pipeline_id}/retry")
+async def retry_pipeline(request: Request, pipeline_id: UUID):
+    uid = _user_id(request)
+    new_pipeline_id = await pipeline_service.retry_pipeline(pipeline_id, uid)
+    return {"pipeline_id": new_pipeline_id, "status": "pending"}
+
+
 # ── WS /api/v1/pipeline/{id}/stream ─────────────────────────────
 
 @router.websocket("/{pipeline_id}/stream")

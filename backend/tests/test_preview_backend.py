@@ -751,8 +751,9 @@ class TestFileSyncService:
     """Tests for file_sync_service.py."""
 
     @pytest.mark.asyncio
+    @patch("app.services.file_sync_service._get_sandbox_agent_url", new_callable=AsyncMock, return_value=None)
     @patch("app.services.file_sync_service.redis_client")
-    async def test_sync_file_publishes_redis(self, mock_redis):
+    async def test_sync_file_publishes_redis(self, mock_redis, _mock_url):
         from app.services.file_sync_service import sync_file
 
         mock_redis.publish = AsyncMock(return_value=2)
@@ -775,15 +776,17 @@ class TestFileSyncService:
 
     @pytest.mark.asyncio
     @patch("app.services.file_sync_service.redis_client", None)
-    async def test_sync_file_no_redis(self):
+    @patch("app.services.file_sync_service._get_sandbox_agent_url", new_callable=AsyncMock, return_value=None)
+    async def test_sync_file_no_redis(self, _mock_url):
         from app.services.file_sync_service import sync_file
 
         result = await sync_file(uuid.uuid4(), "test.ts", "code")
         assert result["receivers"] == 0
 
     @pytest.mark.asyncio
+    @patch("app.services.file_sync_service._get_sandbox_agent_url", new_callable=AsyncMock, return_value=None)
     @patch("app.services.file_sync_service.redis_client")
-    async def test_sync_file_latency(self, mock_redis):
+    async def test_sync_file_latency(self, mock_redis, _mock_url):
         from app.services.file_sync_service import sync_file
 
         mock_redis.publish = AsyncMock(return_value=1)
