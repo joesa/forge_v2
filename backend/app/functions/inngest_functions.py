@@ -344,6 +344,13 @@ async def _pipeline_run_handler(
     await step.run("execute-pipeline", run_pipeline_graph, data)
     await step.run("update-status-completed", update_pipeline_status, data["pipeline_id"], "completed")
 
+    # Trigger auto-build: AI Editor builds the full app from pipeline context
+    await step.run(
+        "trigger-auto-build",
+        _trigger_auto_build,
+        data["project_id"],
+    )
+
 
 pipeline_run_fn = forge_inngest.create_function(
     fn_id="pipeline-run",
@@ -373,6 +380,42 @@ pipeline_failure_handler_fn = forge_inngest.create_function(
     fn_id="pipeline-failure-handler",
     trigger=inngest.TriggerEvent(event="inngest/function.failed"),
 )(_pipeline_failure_handler)
+
+
+# ─────────────────────────────────────────────────────────────────
+# FUNCTION 1c: editor-auto-build
+# ─────────────────────────────────────────────────────────────────
+
+async def _trigger_auto_build(project_id: str) -> None:
+    """Send the auto-build Inngest event. Called as an Inngest step."""
+    await forge_inngest.send(inngest.Event(
+        name="forge/editor-build.run",
+        data={"project_id": project_id},
+    ))
+
+
+async def _run_auto_build(data: dict[str, Any]) -> dict[str, Any]:
+    """Run the auto-build service."""
+    from app.services.auto_build_service import run_auto_build
+    return await run_auto_build(
+        project_id=data["project_id"],
+        sandbox_id=data.get("sandbox_id"),
+    )
+
+
+async def _editor_auto_build_handler(
+    ctx: inngest.Context, step: inngest.Step
+) -> None:
+    """Build the full app via AI Editor immediately after pipeline completes."""
+    data = ctx.event.data
+    await step.run("run-auto-build", _run_auto_build, data)
+
+
+editor_auto_build_fn = forge_inngest.create_function(
+    fn_id="editor-auto-build",
+    trigger=inngest.TriggerEvent(event="forge/editor-build.run"),
+    retries=2,
+)(_editor_auto_build_handler)
 
 
 # ─────────────────────────────────────────────────────────────────

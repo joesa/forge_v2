@@ -285,3 +285,23 @@ async def chat_message(request: Request, body: ChatRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ── GET /api/v1/chat/auto-build/{project_id}/status ──────────────
+
+@router.get("/auto-build/{project_id}/status")
+async def auto_build_status(project_id: UUID, request: Request):
+    """Check whether auto-build is running/completed for a project."""
+    uid = _user_id(request)
+
+    # Verify user owns the project
+    try:
+        await project_service.get_project(project_id, uid)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.services.auto_build_service import get_auto_build_status
+    status = await get_auto_build_status(str(project_id))
+    if status is None:
+        return {"status": "none"}
+    return status

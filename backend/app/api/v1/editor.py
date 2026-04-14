@@ -137,3 +137,58 @@ async def stream_session(websocket: WebSocket, session_id: UUID):
         pass
     finally:
         await pubsub.unsubscribe(channel)
+
+
+# ── WS /api/v1/editor/autobuild/{project_id}/stream ─────────────
+
+@router.websocket("/autobuild/{project_id}/stream")
+async def stream_autobuild(websocket: WebSocket, project_id: UUID):
+    """WebSocket for real-time auto-build progress events."""
+    await websocket.accept()
+
+    # Auth via first message (JWT)
+    auth_msg = await websocket.receive_text()
+    try:
+        payload = jwt.decode(
+            auth_msg,
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+        user_id = UUID(payload["sub"])
+    except (JWTError, KeyError, ValueError):
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
+    # Verify user owns this project
+    from sqlalchemy import select
+    from app.models.project import Project
+    async with get_read_session() as db:
+        result = await db.execute(
+            select(Project).where(
+                Project.id == project_id,
+                Project.user_id == user_id,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            await websocket.close(code=4003, reason="Project not found")
+            return
+
+    if redis_client is None:
+        await websocket.close(code=1011, reason="Redis unavailable")
+        return
+
+    pubsub = redis_client.pubsub()
+    channel = f"autobuild:{project_id}"
+
+    try:
+        await pubsub.subscribe(channel)
+        async for message in pubsub.listen():
+            if message["type"] != "message":
+                continue
+            data = json.loads(message["data"])
+            await websocket.send_json(data)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await pubsub.unsubscribe(channel)

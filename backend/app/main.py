@@ -59,6 +59,7 @@ from app.functions.inngest_functions import (
     pipeline_run_fn,
     pipeline_failure_handler_fn,
     build_run_fn,
+    editor_auto_build_fn,
     idea_generation_fn,
     sandbox_lifecycle_fn,
     pool_replenish_fn,
@@ -71,6 +72,7 @@ inngest_serve(
         pipeline_run_fn,
         pipeline_failure_handler_fn,
         build_run_fn,
+        editor_auto_build_fn,
         idea_generation_fn,
         sandbox_lifecycle_fn,
         # pool_replenish_fn,  # disabled: creates Northflank services unmanaged
