@@ -190,6 +190,7 @@ export default function ChatPanel() {
             void sendMessage(data.prompt)
           }, 200)
         }
+        // If status is 'completed' or 'running', auto-build already happened — do nothing
       } catch {
         // No pipeline context or error — normal chat mode
       }
@@ -279,6 +280,7 @@ export default function ChatPanel() {
           messages: allMessages,
           active_file: activeFile,
           active_file_content: activeFile ? (fileContents[activeFile] ?? null) : null,
+          is_auto_build: isAutoBuildRef.current,
         }),
         signal: ctrl.signal,
       })

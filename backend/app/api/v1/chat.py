@@ -39,6 +39,7 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     active_file: str | None = None
     active_file_content: str | None = None
+    is_auto_build: bool = False
 
 
 class ChatFileEdit(BaseModel):
@@ -184,15 +185,26 @@ async def chat_message(request: Request, body: ChatRequest):
     if not settings.ANTHROPIC_API_KEY and not settings.OPENAI_API_KEY:
         raise HTTPException(status_code=503, detail="Chat service not configured")
 
-    system_prompt = await _build_system_prompt(
-        body.project_id, body.active_file, body.active_file_content
-    )
+    # For auto-build, use a minimal system prompt — the mega-prompt already has all context
+    if body.is_auto_build:
+        system_prompt = (
+            "You are Forge AI, an expert full-stack developer. "
+            "Follow the instructions in the user message exactly. "
+            "Generate COMPLETE file contents in forge-edit blocks. "
+            "NEVER stop early or skip files.\n\n"
+            "IMPORTANT vite.config.ts RULE: ALWAYS include server.allowedHosts = true "
+            "in the Vite config to prevent blocked-host errors in the preview sandbox.\n"
+        )
+    else:
+        system_prompt = await _build_system_prompt(
+            body.project_id, body.active_file, body.active_file_content
+        )
 
     # Convert messages
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
     async def _stream_anthropic():
-        """Try Anthropic models. Yields (type, content) tuples."""
+        """Try Anthropic models with auto-continuation on max_tokens."""
         import asyncio
 
         if not settings.ANTHROPIC_API_KEY:
@@ -200,42 +212,92 @@ async def chat_message(request: Request, body: ChatRequest):
             return
 
         logger.info(
-            "Anthropic stream: system_prompt=%d chars, messages=%d, total_user_chars=%d",
+            "Anthropic stream: system_prompt=%d chars, messages=%d, total_user_chars=%d, is_auto_build=%s",
             len(system_prompt),
             len(messages),
             sum(len(m["content"]) for m in messages if m["role"] == "user"),
+            body.is_auto_build,
         )
 
         client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-        for model in ANTHROPIC_MODELS:
-            for attempt in range(3):
-                try:
-                    async with client.messages.stream(
-                        model=model,
-                        max_tokens=ANTHROPIC_MAX_TOKENS,
-                        system=system_prompt,
-                        messages=messages,
-                    ) as stream:
-                        async for text in stream.text_stream:
-                            yield ("text", text)
-                    yield ("done", None)
-                    return
-                except anthropic.APIStatusError as e:
-                    if e.status_code == 529:
-                        logger.warning("Anthropic %s overloaded (attempt %d/3)", model, attempt + 1)
-                        await asyncio.sleep(2 ** attempt)
-                        continue
-                    logger.error("Anthropic APIStatusError (model=%s, status=%s): %s", model, e.status_code, e)
-                    break
-                except anthropic.APIError as e:
-                    logger.error("Anthropic APIError (model=%s): %s", model, e)
-                    break
-                except Exception as e:
-                    logger.error("Anthropic unexpected error (model=%s): %s: %s", model, type(e).__name__, e)
-                    break
+        model = ANTHROPIC_MODELS[0]  # Use primary model for continuations
+        max_continuations = 3 if body.is_auto_build else 1
+        conv_messages = list(messages)  # mutable copy for continuations
+        accumulated = ""
+
+        for continuation in range(max_continuations + 1):
+            if continuation > 0:
+                logger.info("Anthropic continuation %d/%d for model=%s", continuation, max_continuations, model)
+
+            succeeded = False
+            for m_idx, m in enumerate([model] if continuation > 0 else ANTHROPIC_MODELS):
+                for attempt in range(3):
+                    try:
+                        async with client.messages.stream(
+                            model=m,
+                            max_tokens=ANTHROPIC_MAX_TOKENS,
+                            system=system_prompt,
+                            messages=conv_messages,
+                        ) as stream:
+                            async for text in stream.text_stream:
+                                accumulated += text
+                                yield ("text", text)
+                            final_msg = stream.get_final_message()
+
+                        # Check if model hit output token limit
+                        stop_reason = final_msg.stop_reason if final_msg else "end_turn"
+                        if stop_reason == "max_tokens" and continuation < max_continuations:
+                            logger.warning(
+                                "Anthropic hit max_tokens (%d chars so far), continuing...",
+                                len(accumulated),
+                            )
+                            # Append assistant output + continuation prompt
+                            conv_messages.append({"role": "assistant", "content": accumulated})
+                            conv_messages.append({
+                                "role": "user",
+                                "content": (
+                                    "You were cut off mid-generation. Continue EXACTLY where you stopped. "
+                                    "Do NOT repeat any files already generated. "
+                                    "Do NOT add any preamble — resume the forge-edit block or start the next one immediately."
+                                ),
+                            })
+                            succeeded = True
+                            model = m  # lock model for continuations
+                            break  # break attempt loop, continue outer continuation loop
+                        else:
+                            yield ("done", None)
+                            return
+
+                    except anthropic.APIStatusError as e:
+                        if e.status_code == 529:
+                            logger.warning("Anthropic %s overloaded (attempt %d/3)", m, attempt + 1)
+                            await asyncio.sleep(2 ** attempt)
+                            continue
+                        logger.error("Anthropic APIStatusError (model=%s, status=%s): %s", m, e.status_code, e)
+                        break
+                    except anthropic.APIError as e:
+                        logger.error("Anthropic APIError (model=%s): %s", m, e)
+                        break
+                    except Exception as e:
+                        logger.error("Anthropic unexpected error (model=%s): %s: %s", m, type(e).__name__, e)
+                        break
+                else:
+                    continue  # all attempts exhausted for this model, try next
+                if succeeded:
+                    break  # model succeeded, proceed to next continuation
+                break  # model failed (non-529), stop trying
             else:
-                continue
-            break
+                # All models exhausted without success
+                break
+
+            if not succeeded:
+                break  # Error occurred, fall through to OpenAI
+
+        else:
+            # Loop completed all continuations normally (shouldn't reach here without yield done/return)
+            yield ("done", None)
+            return
+
         # Signal that anthropic failed — caller should try OpenAI
         yield ("fallback", None)
 
@@ -339,10 +401,10 @@ async def auto_build_start(project_id: UUID, request: Request):
         set_auto_build_status,
     )
 
-    # Don't start if already running (prevents double-trigger)
+    # Don't start if already running or completed (prevents re-trigger on editor revisit)
     status = await get_auto_build_status(str(project_id))
-    if status and status.get("status") == "running":
-        return {"status": "running"}
+    if status and status.get("status") in ("running", "completed"):
+        return {"status": status["status"]}
 
     # Build the full auto-build prompt from pipeline context
     prompt = await build_chat_auto_build_prompt(str(project_id))

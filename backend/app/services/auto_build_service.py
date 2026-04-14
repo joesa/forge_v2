@@ -223,6 +223,7 @@ that matches ALL the specifications from the C-Suite analysis, design architectu
 Generate files in this order:
 1. package.json (with ALL dependencies from manifest)
 2. Config files (vite, tailwind, tsconfig, postcss)
+   - vite.config.ts MUST include: server.allowedHosts = true, server.host = '0.0.0.0', server.port = 3000
 3. Type definitions / interfaces
 4. Utility files and helpers
 5. Layout components (header, footer, sidebar)

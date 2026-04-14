@@ -182,8 +182,73 @@ function getViteMajorVersion() {
   }
 }
 
+/**
+ * Ensure vite.config contains server.allowedHosts = true.
+ * This prevents "Blocked request. This host is not allowed." errors
+ * when accessing the sandbox through the Northflank reverse proxy.
+ * Works for any Vite version (5+).
+ */
+function patchViteAllowedHosts() {
+  const candidates = ["vite.config.ts", "vite.config.js", "vite.config.mjs"];
+  let configPath = null;
+  for (const name of candidates) {
+    const p = join(APP_DIR, name);
+    if (existsSync(p)) {
+      configPath = p;
+      break;
+    }
+  }
+  if (!configPath) {
+    console.log("[forge-agent] No vite config found — skipping allowedHosts patch");
+    return;
+  }
+
+  try {
+    let content = readFileSync(configPath, "utf-8");
+    // Already has allowedHosts — skip
+    if (content.includes("allowedHosts")) {
+      console.log("[forge-agent] vite config already has allowedHosts");
+      return;
+    }
+
+    // Strategy 1: Find existing server: { ... } block and inject allowedHosts
+    const serverBlockRe = /(server\s*:\s*\{)/;
+    if (serverBlockRe.test(content)) {
+      content = content.replace(serverBlockRe, "$1\n    allowedHosts: true,");
+      writeFileSync(configPath, content, "utf-8");
+      console.log("[forge-agent] Patched vite config: injected allowedHosts into existing server block");
+      return;
+    }
+
+    // Strategy 2: Find defineConfig({ ... }) and inject server block
+    const defineConfigRe = /(defineConfig\s*\(\s*\{)/;
+    if (defineConfigRe.test(content)) {
+      content = content.replace(defineConfigRe, "$1\n  server: { allowedHosts: true },");
+      writeFileSync(configPath, content, "utf-8");
+      console.log("[forge-agent] Patched vite config: added server.allowedHosts block");
+      return;
+    }
+
+    // Strategy 3: Find `export default {` (no defineConfig wrapper)
+    const exportDefaultRe = /(export\s+default\s*\{)/;
+    if (exportDefaultRe.test(content)) {
+      content = content.replace(exportDefaultRe, "$1\n  server: { allowedHosts: true },");
+      writeFileSync(configPath, content, "utf-8");
+      console.log("[forge-agent] Patched vite config: added server.allowedHosts to export default");
+      return;
+    }
+
+    console.warn("[forge-agent] Could not patch vite config — unrecognized format");
+  } catch (err) {
+    console.error("[forge-agent] Failed to patch vite config:", err.message);
+  }
+}
+
 function startDevServer() {
   console.log(`[forge-agent] Starting dev server on port ${DEV_SERVER_PORT}...`);
+
+  // Patch vite config to allow all hosts (prevents blocked-host errors behind reverse proxy)
+  patchViteAllowedHosts();
 
   const viteMajor = getViteMajorVersion();
   // --allowedHosts is only supported in Vite 6+
@@ -254,6 +319,12 @@ function writeSandboxFile(filePath, content) {
   mkdirSync(dirname(fullPath), { recursive: true });
   writeFileSync(fullPath, content, "utf-8");
   console.log(`[forge-agent] Synced: ${filePath}`);
+
+  // Re-patch allowedHosts if vite config was overwritten
+  if (filePath.startsWith("vite.config")) {
+    patchViteAllowedHosts();
+  }
+
   return true;
 }
 
