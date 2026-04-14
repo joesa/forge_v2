@@ -67,6 +67,18 @@ async def update_project(
 
 
 async def delete_project(project_id: UUID, user_id: UUID) -> None:
+    # Fetch sandbox info before deleting (CASCADE will remove the DB row)
+    from app.models.sandbox import Sandbox
+    sandbox_nf_ids: list[str] = []
+    async with get_read_session() as session:
+        result = await session.execute(
+            select(Sandbox.northflank_service_id).where(
+                Sandbox.project_id == project_id,
+                Sandbox.northflank_service_id.is_not(None),
+            )
+        )
+        sandbox_nf_ids = [row for row in result.scalars().all() if row]
+
     async with get_write_session() as session:
         result = await session.execute(
             select(Project).where(Project.id == project_id, Project.user_id == user_id)
@@ -75,6 +87,21 @@ async def delete_project(project_id: UUID, user_id: UUID) -> None:
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         await session.delete(project)
+
+    # Destroy Northflank sandbox services (fire-and-forget)
+    if sandbox_nf_ids:
+        import logging
+        logger = logging.getLogger(__name__)
+        try:
+            from app.functions.inngest_functions import call_northflank_api
+            for nf_id in sandbox_nf_ids:
+                try:
+                    await call_northflank_api("destroy", {"northflank_service_id": nf_id})
+                    logger.info("Destroyed Northflank sandbox service: %s", nf_id)
+                except Exception as e:
+                    logger.warning("Failed to destroy sandbox %s: %s", nf_id, e)
+        except Exception as e:
+            logger.warning("Failed to clean up sandbox services: %s", e)
 
 
 # ── File operations ──────────────────────────────────────────────

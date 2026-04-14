@@ -168,20 +168,36 @@ function npmInstall() {
 
 // ── 3. Start dev server ─────────────────────────────────────────
 
+/**
+ * Detect installed Vite major version. Returns 0 if Vite is not found.
+ */
+function getViteMajorVersion() {
+  try {
+    const vitePkg = JSON.parse(
+      readFileSync(join(APP_DIR, "node_modules", "vite", "package.json"), "utf-8"),
+    );
+    return parseInt(vitePkg.version.split(".")[0], 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 function startDevServer() {
   console.log(`[forge-agent] Starting dev server on port ${DEV_SERVER_PORT}...`);
 
+  const viteMajor = getViteMajorVersion();
+  // --allowedHosts is only supported in Vite 6+
+  const allowedHostsArgs = viteMajor >= 6 ? ["--allowedHosts", "all"] : [];
+
   // Detect framework — read package.json scripts
   let startCmd = "npx";
-  let startArgs = ["vite", "--host", "0.0.0.0", "--port", String(DEV_SERVER_PORT), "--allowedHosts", "all"];
+  let startArgs = ["vite", "--host", "0.0.0.0", "--port", String(DEV_SERVER_PORT), ...allowedHostsArgs];
 
   const pkgPath = join(APP_DIR, "package.json");
   if (existsSync(pkgPath)) {
     try {
       const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
       const scripts = pkg.scripts || {};
-      // If there's a custom dev script, use it (don't append --host/--port since the
-      // generated dev script already includes them)
       if (scripts.dev) {
         startCmd = "npm";
         startArgs = ["run", "dev"];

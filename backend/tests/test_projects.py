@@ -201,7 +201,21 @@ async def test_update_project(auth_client):
 
 async def test_delete_project(auth_client):
     project = _make_project()
-    with patch("app.services.project_service.get_write_session") as mock_ws:
+    with patch("app.services.project_service.get_read_session") as mock_rs, \
+         patch("app.services.project_service.get_write_session") as mock_ws:
+        # Mock read session (sandbox lookup returns empty)
+        rs_session = AsyncMock()
+        rs_result = MagicMock()
+        rs_result.scalars.return_value.all.return_value = []
+        rs_session.execute.return_value = rs_result
+
+        @asynccontextmanager
+        async def _rs():
+            yield rs_session
+
+        mock_rs.side_effect = _rs
+
+        # Mock write session (project delete)
         session = AsyncMock()
         result = MagicMock()
         result.scalar_one_or_none.return_value = project
