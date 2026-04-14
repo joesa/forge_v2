@@ -7,7 +7,7 @@ from uuid import UUID
 import anthropic
 import openai
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from app.config import settings
@@ -326,10 +326,10 @@ async def auto_build_start(project_id: UUID, request: Request):
         set_auto_build_status,
     )
 
-    # Don't start if already running or completed
+    # Don't start if already running (prevents double-trigger)
     status = await get_auto_build_status(str(project_id))
-    if status and status.get("status") in ("running", "completed"):
-        return {"status": status["status"]}
+    if status and status.get("status") == "running":
+        return {"status": "running"}
 
     # Build the full auto-build prompt from pipeline context
     prompt = await build_chat_auto_build_prompt(str(project_id))
@@ -356,3 +356,31 @@ async def auto_build_complete(project_id: UUID, request: Request):
     from app.services.auto_build_service import set_auto_build_status
     await set_auto_build_status(str(project_id), "completed")
     return {"status": "completed"}
+
+
+# ── GET /api/v1/chat/auto-build/{project_id}/context ──────────────
+
+@router.get("/auto-build/{project_id}/context")
+async def auto_build_context(project_id: UUID, request: Request):
+    """Return the full auto-build mega-prompt as a downloadable text file."""
+    uid = _user_id(request)
+
+    try:
+        project = await project_service.get_project(project_id, uid)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.services.auto_build_service import build_chat_auto_build_prompt
+
+    prompt = await build_chat_auto_build_prompt(str(project_id))
+    if not prompt:
+        return Response(status_code=204)
+
+    safe_name = (project.name or "project").replace(" ", "_").lower()
+    filename = f"{safe_name}_build_context.md"
+
+    return Response(
+        content=prompt,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

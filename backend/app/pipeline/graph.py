@@ -58,8 +58,8 @@ async def execute_pipeline(
     else:
         await _publish_event(pipeline_id, "pipeline_complete", 6, "completed", "Pipeline complete")
 
-        # Persist the full pipeline context so the auto-build can read it
-        await _save_pipeline_context(final_state)
+    # Always persist pipeline context so auto-build can use whatever data is available
+    await _save_pipeline_context(final_state)
 
     return dict(final_state)
 
@@ -85,6 +85,9 @@ async def _save_pipeline_context(state: dict[str, Any]) -> None:
         "build_id": state.get("build_id", ""),
         "sandbox_id": state.get("sandbox_id", ""),
     }
+
+    populated = [k for k, v in context.items() if v and k not in ("pipeline_id", "build_id", "sandbox_id")]
+    logger.info("Pipeline context for %s — populated keys: %s", project_id, populated)
 
     try:
         await upload_file(

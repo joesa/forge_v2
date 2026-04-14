@@ -284,6 +284,30 @@ export default function PipelinePage() {
     })
   }, [id, addLog, startPipeline])
 
+  const [downloadingCtx, setDownloadingCtx] = useState(false)
+  const handleDownloadContext = useCallback(async () => {
+    if (!id) return
+    setDownloadingCtx(true)
+    try {
+      const resp = await apiClient.get<string>(`/chat/auto-build/${id}/context`, { responseType: 'text' as never })
+      if (resp.status === 204 || !resp.data) {
+        alert('No build context saved for this project. Please rerun the pipeline \u2014 context will be saved on completion.')
+        return
+      }
+      const safeName = (projectName || 'project').replace(/[^a-zA-Z0-9_-]/g, '_')
+      const blob = new Blob([resp.data], { type: 'text/markdown;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${safeName}_build_context.md`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch { /* network error — ignore */ }
+    finally { setDownloadingCtx(false) }
+  }, [id, projectName])
+
   // 1. Fetch project → 2. Check for existing pipeline → 3. Start or show manual rerun
   useEffect(() => {
     if (!id) return
@@ -558,6 +582,9 @@ export default function PipelinePage() {
           </h1>
           <span className="tag tag-forge">Pipeline</span>
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => navigate(`/projects/${id}/editor`)}>⚡ Editor</button>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={handleDownloadContext} disabled={downloadingCtx}>
+            {downloadingCtx ? '⏳ Downloading…' : '📋 Build Context'}
+          </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <span className="tag tag-forge" style={overallStatus === 'running' ? { animation: 'pulse-f 1.8s ease-in-out infinite' } : undefined}>

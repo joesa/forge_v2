@@ -19,6 +19,7 @@ import anthropic
 import openai
 
 from app.config import settings
+from app.core.database import get_read_session
 from app.core.redis import redis_client
 from app.services import storage_service
 from app.services.file_sync_service import sync_file
@@ -236,11 +237,47 @@ START GENERATING NOW. Output each file as a forge-edit block.
 async def build_chat_auto_build_prompt(project_id: str) -> str | None:
     """Build the full auto-build prompt (instructions + pipeline context) for chat submission."""
     ctx = await _load_pipeline_context(project_id)
+
+    # Fallback: if pipeline_context.json is missing, build minimal context from DB
+    if not ctx:
+        ctx = await _fallback_context_from_db(project_id)
+
     if not ctx:
         return None
     current_files = await _load_current_files(project_id)
     context_prompt = _build_auto_build_prompt(ctx, current_files)
     return f"{SYSTEM_PROMPT}\n\n{context_prompt}"
+
+
+async def _fallback_context_from_db(project_id: str) -> dict | None:
+    """Build a minimal pipeline context from the DB when the storage file is missing."""
+    try:
+        from app.models.pipeline_run import PipelineRun, PipelineStatus
+        from sqlalchemy import select
+
+        async with get_read_session() as db:
+            result = await db.execute(
+                select(PipelineRun).where(
+                    PipelineRun.project_id == project_id,
+                    PipelineRun.status == PipelineStatus.completed,
+                ).order_by(PipelineRun.created_at.desc()).limit(1)
+            )
+            run = result.scalar_one_or_none()
+            if not run or not run.idea_spec:
+                return None
+
+            logger.info("Using fallback DB context for project %s (pipeline %s)", project_id, run.id)
+            return {
+                "idea_spec": run.idea_spec,
+                "design_architecture": {},
+                "csuite_outputs": {},
+                "comprehensive_plan": {},
+                "spec_outputs": {},
+                "build_manifest": {},
+            }
+    except Exception as e:
+        logger.error("Fallback context from DB failed for %s: %s", project_id, e)
+        return None
 
 
 # ── Core execution ───────────────────────────────────────────────

@@ -12,6 +12,18 @@ interface Project {
   updated_at: string | null
 }
 
+function downloadBlob(data: string, filename: string) {
+  const blob = new Blob([data], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
 const statusStyles: Record<string, { color: string; bg: string; border: string; label: string }> = {
   live: { color: '#3dffa0', bg: 'rgba(61,255,160,0.1)', border: 'rgba(61,255,160,0.2)', label: '● Live' },
   building: { color: '#63d9ff', bg: 'rgba(99,217,255,0.1)', border: 'rgba(99,217,255,0.2)', label: '◎ Building' },
@@ -46,6 +58,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [downloadingCtx, setDownloadingCtx] = useState(false)
 
   const fetchProject = useCallback(async () => {
     if (!id) return
@@ -60,6 +73,24 @@ export default function ProjectDetailPage() {
   }, [id])
 
   useEffect(() => { fetchProject() }, [fetchProject])
+
+  const handleDownloadContext = async () => {
+    if (!id) return
+    setDownloadingCtx(true)
+    try {
+      const resp = await apiClient.get<string>(`/chat/auto-build/${id}/context`, { responseType: 'text' as never })
+      if (resp.status === 204 || !resp.data) {
+        alert('No build context saved for this project. Please rerun the pipeline \u2014 context will be saved on completion.')
+        return
+      }
+      const name = project?.name?.replace(/[^a-zA-Z0-9_-]/g, '_') ?? 'project'
+      downloadBlob(resp.data, `${name}_build_context.md`)
+    } catch {
+      // network error — ignore
+    } finally {
+      setDownloadingCtx(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -114,6 +145,9 @@ export default function ProjectDetailPage() {
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-primary" onClick={() => navigate(`/projects/${id}/editor`)}>Open Editor →</button>
             <button className="btn btn-ghost" onClick={() => navigate(`/pipeline/${id}`)}>◎ Pipeline</button>
+            <button className="btn btn-ghost" onClick={handleDownloadContext} disabled={downloadingCtx}>
+              {downloadingCtx ? '⏳ Downloading…' : '📋 Build Context'}
+            </button>
           </div>
         </div>
       </div>

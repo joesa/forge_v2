@@ -182,6 +182,7 @@ export default function ChatPanel() {
       try {
         const resp = await apiClient.post(`/chat/auto-build/${projectId}/start`)
         const data = resp.data as { status: string; prompt?: string }
+        console.log('[ForgeAI] auto-build /start response:', data.status, data.prompt ? `(${data.prompt.length} chars)` : '(no prompt)')
         if (data.status === 'started' && data.prompt) {
           isAutoBuildRef.current = true
           // Small delay to ensure component is fully mounted

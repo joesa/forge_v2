@@ -152,7 +152,10 @@ export default function ProjectsListPage() {
                   <div style={{ fontSize: 11, color: 'rgba(232,232,240,0.40)', lineHeight: 1.5, marginBottom: 14 }}>{p.description}</div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: 'rgba(232,232,240,0.30)' }}>{timeAgo(p.updated_at)}</span>
-                    <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/projects/${p.id}/editor`)}>Open Editor →</button>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/projects/${p.id}`)}>View</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/projects/${p.id}/editor`)}>Editor →</button>
+                    </div>
                   </div>
                 </div>
               </div>

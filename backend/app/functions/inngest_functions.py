@@ -344,12 +344,8 @@ async def _pipeline_run_handler(
     await step.run("execute-pipeline", run_pipeline_graph, data)
     await step.run("update-status-completed", update_pipeline_status, data["pipeline_id"], "completed")
 
-    # Trigger auto-build: AI Editor builds the full app from pipeline context
-    await step.run(
-        "trigger-auto-build",
-        _trigger_auto_build,
-        data["project_id"],
-    )
+    # Auto-build is now triggered by the frontend ChatPanel on editor mount.
+    # It streams through normal chat SSE instead of running as a background job.
 
 
 pipeline_run_fn = forge_inngest.create_function(
