@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 ANTHROPIC_MODELS = ["claude-sonnet-4-20250514", "claude-3-haiku-20240307"]
 OPENAI_MODEL = "gpt-4o"
-MAX_TOKENS = 16384
+MAX_TOKENS = 65536
 
 
 # ── Status tracking via Redis ────────────────────────────────────
@@ -231,6 +231,16 @@ Generate files in this order:
 
 START GENERATING NOW. Output each file as a forge-edit block.
 """
+
+
+async def build_chat_auto_build_prompt(project_id: str) -> str | None:
+    """Build the full auto-build prompt (instructions + pipeline context) for chat submission."""
+    ctx = await _load_pipeline_context(project_id)
+    if not ctx:
+        return None
+    current_files = await _load_current_files(project_id)
+    context_prompt = _build_auto_build_prompt(ctx, current_files)
+    return f"{SYSTEM_PROMPT}\n\n{context_prompt}"
 
 
 # ── Core execution ───────────────────────────────────────────────

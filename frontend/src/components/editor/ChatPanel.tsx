@@ -157,13 +157,12 @@ export default function ChatPanel() {
 
   const [input, setInput] = useState('')
   const [streamingPath, setStreamingPath] = useState<string | null>(null)
-  const [autoBuildStatus, setAutoBuildStatus] = useState<string>('none')
-  const [autoBuildFiles, setAutoBuildFiles] = useState<string[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const appliedCountRef = useRef(0)
   const lastLiveUpdateRef = useRef(0)
-  const autoBuildWsRef = useRef<WebSocket | null>(null)
+  const autoBuildTriggeredRef = useRef(false)
+  const isAutoBuildRef = useRef(false)
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -171,118 +170,31 @@ export default function ChatPanel() {
     if (el) {
       requestAnimationFrame(() => { el.scrollTop = el.scrollHeight })
     }
-  }, [messages, streamingPath, autoBuildFiles])
+  }, [messages, streamingPath])
 
-  // Auto-build detection: check status on mount and connect WS if running
+  // Auto-build: on first mount, check for pipeline context and auto-submit through chat
   useEffect(() => {
-    if (!projectId) return
-    let cancelled = false
+    if (!projectId || autoBuildTriggeredRef.current) return
+    if (messages.length > 0) return
+    autoBuildTriggeredRef.current = true
 
-    const checkAutoBuild = async () => {
+    const triggerAutoBuild = async () => {
       try {
-        const token = await getValidToken()
-        if (!token || cancelled) return
-        const resp = await apiClient.get(`/chat/auto-build/${projectId}/status`)
-        const data = resp.data as { status: string; files_written?: number; file_list?: string[] }
-        if (cancelled) return
-
-        if (data.status === 'running') {
-          setAutoBuildStatus('running')
-          // Add auto-build assistant intro message if chat is empty
-          if (messages.length === 0) {
-            addChatMessage({
-              id: 'autobuild-intro',
-              role: 'assistant',
-              content: '🔨 **Auto-Build in progress** — Forge is generating your full application based on the pipeline analysis. Files are being written in real-time…',
-            })
-          }
-          connectAutoBuildWs(token)
-        } else if (data.status === 'completed') {
-          setAutoBuildStatus('completed')
-          if (data.file_list) setAutoBuildFiles(data.file_list)
-          if (messages.length === 0) {
-            addChatMessage({
-              id: 'autobuild-complete',
-              role: 'assistant',
-              content: `✅ **Auto-Build complete** — ${data.files_written ?? 0} files were generated from the pipeline analysis. Your application is ready! Explore the file tree or ask me to make changes.`,
-            })
-          }
-        }
-        // status === 'none' → try to trigger auto-build if pipeline context exists
-        if (data.status === 'none') {
-          try {
-            const startResp = await apiClient.post(`/chat/auto-build/${projectId}/start`)
-            const startData = startResp.data as { status: string }
-            if (startData.status === 'started' || startData.status === 'running') {
-              setAutoBuildStatus('running')
-              if (messages.length === 0) {
-                addChatMessage({
-                  id: 'autobuild-intro',
-                  role: 'assistant',
-                  content: '🔨 **Auto-Build in progress** — Forge is generating your full application based on the pipeline analysis. Files are being written in real-time…',
-                })
-              }
-              connectAutoBuildWs(token)
-            }
-          } catch {
-            // No pipeline context or trigger failed — normal chat
-          }
+        const resp = await apiClient.post(`/chat/auto-build/${projectId}/start`)
+        const data = resp.data as { status: string; prompt?: string }
+        if (data.status === 'started' && data.prompt) {
+          isAutoBuildRef.current = true
+          // Small delay to ensure component is fully mounted
+          setTimeout(() => {
+            void sendMessage(data.prompt)
+          }, 200)
         }
       } catch {
-        // Endpoint not available or error — proceed normally
+        // No pipeline context or error — normal chat mode
       }
     }
 
-    const connectAutoBuildWs = (token: string) => {
-      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      const host = import.meta.env.VITE_API_BASE_URL
-        ? new URL(import.meta.env.VITE_API_BASE_URL as string).host
-        : window.location.host
-      const wsUrl = `${protocol}://${host}/api/v1/editor/autobuild/${projectId}/stream`
-      const ws = new WebSocket(wsUrl)
-      autoBuildWsRef.current = ws
-
-      ws.onopen = () => { ws.send(token) }
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data as string) as {
-            type?: string; status?: string; path?: string; description?: string;
-            files_done?: number; message?: string; file_list?: string[];
-          }
-          if (msg.type === 'autobuild_file' && msg.path) {
-            setAutoBuildFiles(prev => [...prev, msg.path as string])
-            // Load the file into the editor store so the file tree updates
-            apiClient.get(`/projects/${projectId}/files/content`, {
-              params: { path: msg.path },
-            }).then(({ data }: { data: { content: string } }) => {
-              openFile(msg.path as string, data.content)
-            }).catch(() => { /* file will appear on next tree refresh */ })
-          }
-          if (msg.type === 'autobuild_status' && msg.status === 'completed') {
-            setAutoBuildStatus('completed')
-            if (msg.file_list) setAutoBuildFiles(msg.file_list)
-            addChatMessage({
-              id: 'autobuild-done',
-              role: 'assistant',
-              content: `✅ **Auto-Build complete** — ${msg.file_list?.length ?? 0} files generated. Your application is ready! Explore the file tree or ask me to make changes.`,
-            })
-          }
-        } catch { /* ignore non-JSON */ }
-      }
-
-      ws.onclose = () => { autoBuildWsRef.current = null }
-    }
-
-    void checkAutoBuild()
-
-    return () => {
-      cancelled = true
-      if (autoBuildWsRef.current) {
-        autoBuildWsRef.current.close()
-        autoBuildWsRef.current = null
-      }
-    }
+    void triggerAutoBuild()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
@@ -325,16 +237,21 @@ export default function ChatPanel() {
     setStreamingPath(null)
   }, [setChatStreaming])
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim()
+  const sendMessage = useCallback(async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim()
     if (!text || streaming || !projectId) return
 
-    setInput('')
+    if (!overrideText) setInput('')
     appliedCountRef.current = 0
     setStreamingPath(null)
     resetSyncSteps()
 
-    const userMsg = { id: crypto.randomUUID(), role: 'user' as const, content: text }
+    // For auto-build, show a short summary as the user message, but send full prompt to API
+    const displayText = isAutoBuildRef.current
+      ? '🔨 **Auto-Build** — Building full application from pipeline analysis…'
+      : text
+
+    const userMsg = { id: crypto.randomUUID(), role: 'user' as const, content: displayText }
     addChatMessage(userMsg)
     addChatMessage({ id: crypto.randomUUID(), role: 'assistant' as const, content: '', pending: true })
     setChatStreaming(true)
@@ -350,7 +267,8 @@ export default function ChatPanel() {
     abortRef.current = ctrl
 
     try {
-      const allMessages = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }))
+      // Send the full text (could be auto-build prompt) but display the summary in chat
+      const allMessages = [...messages, { ...userMsg, content: text }].map((m) => ({ role: m.role, content: m.content }))
 
       const resp = await fetch(`${API_BASE}/chat/message`, {
         method: 'POST',
@@ -447,6 +365,11 @@ export default function ChatPanel() {
       abortRef.current = null
       // Clear sync dots after a short delay so user sees final state
       setTimeout(() => resetSyncSteps(), 3000)
+      // Mark auto-build as completed in Redis
+      if (isAutoBuildRef.current) {
+        isAutoBuildRef.current = false
+        apiClient.post(`/chat/auto-build/${projectId}/complete`).catch(() => {})
+      }
     }
   }, [input, streaming, projectId, messages, activeFile, fileContents, addChatMessage, updateLastAssistantMessage, setChatStreaming, openFile, saveAndSync, setSyncStep, setSyncFile, resetSyncSteps])
 
@@ -472,7 +395,13 @@ export default function ChatPanel() {
             background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
             borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6,
             color: 'rgba(232,232,240,0.75)',
-          }}>{msg.content}</div>
+          }}>
+            <div className="forge-md">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                {msg.content}
+              </ReactMarkdown>
+            </div>
+          </div>
         </div>
       )
     }
@@ -533,9 +462,9 @@ export default function ChatPanel() {
           <div style={{ fontSize: 13, fontWeight: 700 }}>Forge AI</div>
           <div style={{
             fontFamily: "'JetBrains Mono', monospace", fontSize: 9,
-            color: streaming ? '#f5c842' : autoBuildStatus === 'running' ? '#f5c842' : '#3dffa0',
+            color: streaming ? '#f5c842' : '#3dffa0',
           }}>
-            {streaming ? '● streaming...' : autoBuildStatus === 'running' ? '● auto-building...' : '● online'}
+            {streaming ? '● streaming...' : '● online'}
           </div>
         </div>
       </div>
@@ -544,7 +473,7 @@ export default function ChatPanel() {
       <div ref={scrollRef} style={{
         flex: 1, padding: '16px 14px', overflowY: 'auto',
       }}>
-        {messages.length === 0 && autoBuildStatus === 'none' && (
+        {messages.length === 0 && !streaming && (
           <div style={{ textAlign: 'center', padding: '48px 16px' }}>
             <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.8 }}>⚡</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>Forge AI</div>
@@ -557,64 +486,6 @@ export default function ChatPanel() {
           </div>
         )}
         {messages.map((msg, i) => renderMessage(msg, i))}
-        {/* Auto-build file progress */}
-        {autoBuildStatus === 'running' && autoBuildFiles.length > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <div style={{
-              fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fontWeight: 600,
-              letterSpacing: 0.5, color: 'rgba(245,200,66,0.6)', marginBottom: 6,
-            }}>FILES GENERATED ({autoBuildFiles.length})</div>
-            {autoBuildFiles.map((f) => (
-              <div key={f} style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0',
-                fontFamily: "'JetBrains Mono', monospace", fontSize: 10,
-              }}>
-                <span style={{ color: '#3dffa0', fontSize: 9 }}>✓</span>
-                <span style={{ color: '#63d9ff', cursor: 'pointer' }} onClick={() => {
-                  apiClient.get(`/projects/${projectId}/files/content`, {
-                    params: { path: f },
-                  }).then(({ data }: { data: { content: string } }) => {
-                    openFile(f, data.content)
-                  }).catch(() => {})
-                }}>{f}</span>
-              </div>
-            ))}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '6px 0', marginTop: 4,
-            }}>
-              <div style={{
-                width: 8, height: 8, borderRadius: '50%', background: '#f5c842',
-                animation: 'chatPulse 1s ease-in-out infinite',
-              }} />
-              <span style={{
-                fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: '#f5c842',
-              }}>Generating more files…</span>
-            </div>
-          </div>
-        )}
-        {autoBuildStatus === 'completed' && autoBuildFiles.length > 0 && messages.length <= 2 && (
-          <div style={{ marginTop: 8 }}>
-            <div style={{
-              fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fontWeight: 600,
-              letterSpacing: 0.5, color: 'rgba(61,255,160,0.6)', marginBottom: 6,
-            }}>AUTO-BUILD FILES ({autoBuildFiles.length})</div>
-            {autoBuildFiles.map((f) => (
-              <div key={f} style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0',
-                fontFamily: "'JetBrains Mono', monospace", fontSize: 10,
-              }}>
-                <span style={{ color: '#3dffa0', fontSize: 9 }}>✓</span>
-                <span style={{ color: '#63d9ff', cursor: 'pointer' }} onClick={() => {
-                  apiClient.get(`/projects/${projectId}/files/content`, {
-                    params: { path: f },
-                  }).then(({ data }: { data: { content: string } }) => {
-                    openFile(f, data.content)
-                  }).catch(() => {})
-                }}>{f}</span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Input */}

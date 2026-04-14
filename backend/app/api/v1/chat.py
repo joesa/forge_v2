@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from uuid import UUID
@@ -23,7 +22,7 @@ router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 ANTHROPIC_MODELS = ["claude-sonnet-4-20250514", "claude-3-haiku-20240307"]
 # OpenAI fallback model
 OPENAI_MODEL = "gpt-4o"
-MAX_TOKENS = 16384
+MAX_TOKENS = 65536
 
 
 # ── Schemas ──────────────────────────────────────────────────────
@@ -312,7 +311,7 @@ async def auto_build_status(project_id: UUID, request: Request):
 
 @router.post("/auto-build/{project_id}/start")
 async def auto_build_start(project_id: UUID, request: Request):
-    """Trigger auto-build for a project. Runs as a background task."""
+    """Return the assembled auto-build prompt so the frontend can stream it through normal chat."""
     uid = _user_id(request)
 
     # Verify user owns the project
@@ -321,22 +320,39 @@ async def auto_build_start(project_id: UUID, request: Request):
     except Exception:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    from app.services.auto_build_service import get_auto_build_status, run_auto_build
+    from app.services.auto_build_service import (
+        build_chat_auto_build_prompt,
+        get_auto_build_status,
+        set_auto_build_status,
+    )
 
     # Don't start if already running or completed
     status = await get_auto_build_status(str(project_id))
     if status and status.get("status") in ("running", "completed"):
-        return {"status": status["status"], "message": "Auto-build already " + status["status"]}
+        return {"status": status["status"]}
 
-    # Verify pipeline_context.json exists
-    try:
-        await storage_service.download_file(
-            settings.SUPABASE_BUCKET_PROJECTS,
-            f"{project_id}/pipeline_context.json",
-        )
-    except Exception:
+    # Build the full auto-build prompt from pipeline context
+    prompt = await build_chat_auto_build_prompt(str(project_id))
+    if not prompt:
         return {"status": "none", "message": "No pipeline context available"}
 
-    # Launch auto-build as a background task (no Inngest dependency)
-    asyncio.create_task(run_auto_build(str(project_id)))
-    return {"status": "started"}
+    # Mark as running so subsequent calls don't re-trigger
+    await set_auto_build_status(str(project_id), "running")
+    return {"status": "started", "prompt": prompt}
+
+
+# ── POST /api/v1/chat/auto-build/{project_id}/complete ────────────
+
+@router.post("/auto-build/{project_id}/complete")
+async def auto_build_complete(project_id: UUID, request: Request):
+    """Mark auto-build as completed after chat streaming finishes."""
+    uid = _user_id(request)
+
+    try:
+        await project_service.get_project(project_id, uid)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from app.services.auto_build_service import set_auto_build_status
+    await set_auto_build_status(str(project_id), "completed")
+    return {"status": "completed"}
