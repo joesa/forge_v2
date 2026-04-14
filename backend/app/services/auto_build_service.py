@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 
 ANTHROPIC_MODELS = ["claude-sonnet-4-20250514", "claude-3-haiku-20240307"]
 OPENAI_MODEL = "gpt-4o"
-MAX_TOKENS = 65536
+ANTHROPIC_MAX_TOKENS = 64000  # claude-sonnet-4 limit
+OPENAI_MAX_TOKENS = 16384
 
 
 # ── Status tracking via Redis ────────────────────────────────────
@@ -382,7 +383,7 @@ async def run_auto_build(project_id: str, sandbox_id: str | None = None) -> dict
             try:
                 async with client.messages.stream(
                     model=model,
-                    max_tokens=MAX_TOKENS,
+                    max_tokens=ANTHROPIC_MAX_TOKENS,
                     system=SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": user_prompt}],
                 ) as stream:
@@ -406,7 +407,7 @@ async def run_auto_build(project_id: str, sandbox_id: str | None = None) -> dict
         try:
             stream = await oai_client.chat.completions.create(
                 model=OPENAI_MODEL,
-                max_tokens=MAX_TOKENS,
+                max_tokens=OPENAI_MAX_TOKENS,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},

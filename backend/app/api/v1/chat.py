@@ -22,7 +22,9 @@ router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 ANTHROPIC_MODELS = ["claude-sonnet-4-20250514", "claude-3-haiku-20240307"]
 # OpenAI fallback model
 OPENAI_MODEL = "gpt-4o"
-MAX_TOKENS = 65536
+# Max output tokens per model family
+ANTHROPIC_MAX_TOKENS = 64000  # claude-sonnet-4 limit
+OPENAI_MAX_TOKENS = 16384
 
 
 # ── Schemas ──────────────────────────────────────────────────────
@@ -197,13 +199,20 @@ async def chat_message(request: Request, body: ChatRequest):
             yield ("fallback", None)
             return
 
+        logger.info(
+            "Anthropic stream: system_prompt=%d chars, messages=%d, total_user_chars=%d",
+            len(system_prompt),
+            len(messages),
+            sum(len(m["content"]) for m in messages if m["role"] == "user"),
+        )
+
         client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
         for model in ANTHROPIC_MODELS:
             for attempt in range(3):
                 try:
                     async with client.messages.stream(
                         model=model,
-                        max_tokens=MAX_TOKENS,
+                        max_tokens=ANTHROPIC_MAX_TOKENS,
                         system=system_prompt,
                         messages=messages,
                     ) as stream:
@@ -216,10 +225,13 @@ async def chat_message(request: Request, body: ChatRequest):
                         logger.warning("Anthropic %s overloaded (attempt %d/3)", model, attempt + 1)
                         await asyncio.sleep(2 ** attempt)
                         continue
-                    logger.error("Anthropic API error (model=%s): %s", model, e)
+                    logger.error("Anthropic APIStatusError (model=%s, status=%s): %s", model, e.status_code, e)
                     break
                 except anthropic.APIError as e:
-                    logger.error("Anthropic API error (model=%s): %s", model, e)
+                    logger.error("Anthropic APIError (model=%s): %s", model, e)
+                    break
+                except Exception as e:
+                    logger.error("Anthropic unexpected error (model=%s): %s: %s", model, type(e).__name__, e)
                     break
             else:
                 continue
@@ -233,13 +245,14 @@ async def chat_message(request: Request, body: ChatRequest):
             yield ("error", None)
             return
 
+        logger.info("OpenAI fallback: model=%s", OPENAI_MODEL)
         client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         oai_messages = [{"role": "system", "content": system_prompt}] + messages
 
         try:
             stream = await client.chat.completions.create(
                 model=OPENAI_MODEL,
-                max_tokens=MAX_TOKENS,
+                max_tokens=OPENAI_MAX_TOKENS,
                 messages=oai_messages,
                 stream=True,
             )
@@ -249,7 +262,7 @@ async def chat_message(request: Request, body: ChatRequest):
                     yield ("text", delta.content)
             yield ("done", None)
         except Exception as e:
-            logger.error("OpenAI API error: %s", e)
+            logger.error("OpenAI API error (%s): %s: %s", OPENAI_MODEL, type(e).__name__, e)
             yield ("error", None)
 
     async def _stream():
