@@ -168,7 +168,7 @@ export default function PipelinePage() {
       if (finalStatus === 'completed') {
         // Mark remaining running/pending stages as done
         setStages(prev => prev.map(s => (s.status === 'running' || s.status === 'pending') ? { ...s, status: 'done' } : s))
-        // Small delay so the Build green check is visible before overlay
+        // Small delay so the Build green check is visible, then auto-navigate
         setTimeout(() => setCompleted(true), 1200)
       } else {
         // Pipeline failed — only mark currently-running stage as failed, leave done stages alone
@@ -202,9 +202,16 @@ export default function PipelinePage() {
     } catch { /* non-critical — WS events will fill in */ }
   }, [])
 
+  // Auto-navigate to editor when pipeline completes (fresh run, not revisit)
+  const [needsManualRun, setNeedsManualRun] = useState(false)
+  useEffect(() => {
+    if (completed && !needsManualRun && id) {
+      navigate(`/projects/${id}/editor`)
+    }
+  }, [completed, needsManualRun, id, navigate])
+
   // Retry handler — reset state and start a fresh pipeline for the same project
   const [retrying, setRetrying] = useState(false)
-  const [needsManualRun, setNeedsManualRun] = useState(false)
 
   const startPipeline = useCallback(async (proj: { name: string; description?: string; framework?: string }) => {
     try {
@@ -813,17 +820,7 @@ export default function PipelinePage() {
         </div>
       )}
 
-      {/* Completion overlay — only show on fresh completions, not when revisiting */}
-      {completed && !needsManualRun && !selectedStage && !selectedAgent && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="card" style={{ padding: 36, maxWidth: 420, textAlign: 'center' }}>
-            <div style={{ fontSize: 48, marginBottom: 14 }}>🎉</div>
-            <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Your app is ready!</h2>
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18 }}>{doneCount} stages completed · {stages.filter(s => s.status === 'failed').length} errors</p>
-            <button className="btn btn-primary" style={{ height: 48, fontSize: 15, width: '100%', marginBottom: 10 }} onClick={() => navigate(`/projects/${id}/editor`)}>Open in Editor →</button>
-          </div>
-        </div>
-      )}
+      {/* Auto-navigate to editor on fresh completion */}
     </div>
   )
 }

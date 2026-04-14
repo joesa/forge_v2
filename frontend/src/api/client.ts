@@ -13,6 +13,10 @@ client.interceptors.request.use((config) => {
   return config
 })
 
+// Shared refresh promise to prevent race conditions when multiple
+// requests hit 401 simultaneously — only one refresh call at a time.
+let refreshPromise: Promise<string> | null = null
+
 client.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -22,13 +26,18 @@ client.interceptors.response.use(
       const refreshToken = localStorage.getItem('refresh_token')
       if (refreshToken) {
         try {
-          const { data } = await axios.post(
-            (import.meta.env.VITE_API_BASE_URL ?? '') + '/api/v1/auth/refresh',
-            { refresh_token: refreshToken },
-          )
-          localStorage.setItem('access_token', data.access_token)
-          localStorage.setItem('refresh_token', data.refresh_token)
-          original.headers.Authorization = `Bearer ${data.access_token}`
+          if (!refreshPromise) {
+            refreshPromise = axios.post(
+              (import.meta.env.VITE_API_BASE_URL ?? '') + '/api/v1/auth/refresh',
+              { refresh_token: refreshToken },
+            ).then(({ data }) => {
+              localStorage.setItem('access_token', data.access_token as string)
+              localStorage.setItem('refresh_token', data.refresh_token as string)
+              return data.access_token as string
+            }).finally(() => { refreshPromise = null })
+          }
+          const newToken = await refreshPromise
+          original.headers.Authorization = `Bearer ${newToken}`
           return client(original)
         } catch {
           localStorage.removeItem('access_token')
