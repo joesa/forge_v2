@@ -178,6 +178,27 @@ async def _publish_agent(state: PipelineState, agent: str, status: str, output: 
     )
 
 
+async def _publish_build_agent(state: PipelineState, agent_number: int, agent_name: str, status: str, message: str = "", *, detail: dict | None = None) -> None:
+    """Publish a per-build-agent update (used for Build stage progress cards)."""
+    if redis_client is None:
+        return
+    ws_status = "done" if status == "completed" else status
+    msg: dict = {
+        "type": "build_agent_update",
+        "agent_number": agent_number,
+        "agent_name": agent_name,
+        "status": ws_status,
+        "message": message,
+        "timestamp_ms": int(time.time() * 1000),
+    }
+    if detail is not None:
+        msg["detail"] = detail
+    await redis_client.publish(
+        f"pipeline:{state['pipeline_id']}",
+        json.dumps(msg),
+    )
+
+
 # ── Stage 1: Input Layer ────────────────────────────────────────
 async def input_layer(state: PipelineState) -> PipelineState:
     await _publish(state, 1, "running", "Validating input")
@@ -321,9 +342,17 @@ async def csuite_analysis(state: PipelineState) -> PipelineState:
     async def _run_agent(agent: BaseCSuiteAgent) -> tuple[str, dict]:
         await _publish_agent(state, agent.name, "running")
         output = await agent.execute(idea_spec)
+        # Check if the agent hit an error (preserved by base class)
+        agent_error = output.pop("_error", None)
         # Extract a short summary for the card display
         summary = _extract_summary(agent.name, output)
-        await _publish_agent(state, agent.name, "completed", summary, detail=output)
+        if agent_error and not summary:
+            summary = "Analysis completed with fallback defaults"
+        # Include error info in the detail so the modal can display it
+        detail_output = dict(output)
+        if agent_error:
+            detail_output["_analysis_note"] = f"Agent used fallback defaults: {agent_error}"
+        await _publish_agent(state, agent.name, "completed", summary, detail=detail_output)
         return agent.name, output
 
     results = await asyncio.gather(*[_run_agent(a) for a in _CSUITE_AGENTS])
@@ -712,10 +741,14 @@ async def build(state: PipelineState) -> PipelineState:
         os.environ["EXTERNAL_API_BASE_URL"] = wiremock.base_url
 
         # ── Agents 1-9: sequential build ─────────────────────────
+        total_agents = len(BUILD_AGENTS)
         for agent in BUILD_AGENTS:
             await _publish(state, 6, "running", f"Agent {agent.agent_number}: {agent.name}")
+            # Publish per-build-agent progress so frontend shows real-time cards
+            await _publish_build_agent(state, agent.agent_number, agent.name, "running", f"Generating {agent.name} files…")
 
             new_files = await agent.execute(state)
+            files_generated = len(new_files)
             state["generated_files"].update(new_files)
 
             # Snapshot after every agent
@@ -733,11 +766,13 @@ async def build(state: PipelineState) -> PipelineState:
 
             if not g7["passed"]:
                 await _publish(state, 6, "running", f"G7 failed for agent {agent.agent_number}, attempting hotfix")
+                await _publish_build_agent(state, agent.agent_number, agent.name, "running", "Hotfix in progress…")
                 hotfix_result = await apply_hotfix(state, agent.agent_number, g7)
                 if not hotfix_result.applied:
                     state.setdefault("errors", []).append(
                         f"Agent {agent.agent_number} ({agent.name}) G7 failed: {g7['reason']}"
                     )
+                    await _publish_build_agent(state, agent.agent_number, agent.name, "failed", f"G7 failed: {g7['reason']}")
                     await _publish(state, 6, "failed", f"Agent {agent.agent_number} build failed")
                     # Mark build as failed
                     async with get_write_session() as db:
@@ -749,11 +784,21 @@ async def build(state: PipelineState) -> PipelineState:
                         )
                     return state
 
+            # Agent completed — publish success with file count
+            file_list = sorted(new_files.keys())
+            await _publish_build_agent(
+                state, agent.agent_number, agent.name, "done",
+                f"{files_generated} file{'s' if files_generated != 1 else ''} generated",
+                detail={"files": file_list, "agent_number": agent.agent_number, "total_agents": total_agents},
+            )
+
         # ── Agent 10: ReviewAgent — validates only ───────────────
         await _publish(state, 6, "running", "Agent 10: review (validation only)")
+        await _publish_build_agent(state, 10, "review", "running", "Running validation checks…")
 
         review_report = await REVIEW_AGENT.review(state)
         state.setdefault("gate_results", {})["review"] = review_report
+        await _publish_build_agent(state, 10, "review", "done", "Validation complete")
 
         # Snapshot after review
         await capture_snapshot(

@@ -16,6 +16,8 @@ TEMPERATURE = 0
 SEED = 42
 MODEL = "gpt-4o"
 
+MAX_RETRIES = 2
+
 
 class BaseCSuiteAgent(ABC):
     """Base class for all C-Suite agents. Enforces safe defaults on failure."""
@@ -45,6 +47,7 @@ class BaseCSuiteAgent(ABC):
             model=MODEL,
             temperature=TEMPERATURE,
             seed=SEED,
+            max_tokens=4096,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": self._system_prompt()},
@@ -67,14 +70,44 @@ class BaseCSuiteAgent(ABC):
 
     async def execute(self, idea_spec: dict) -> dict:
         """Run agent and validate output against Pydantic schema.
-        Returns safe defaults on any failure — never raises."""
-        try:
-            raw = await self._run(idea_spec)
-            validated = self.schema.model_validate(raw)
-            return validated.model_dump()
-        except ValidationError as e:
-            logger.warning("G2 validation failed for %s: %s", self.name, e)
-            return self.schema().model_dump()
-        except Exception as e:
-            logger.warning("%s failed, returning safe defaults: %s", self.name, e)
-            return self.schema().model_dump()
+
+        Retries up to MAX_RETRIES on failure. If validation fails but the LLM
+        returned data, merges the raw data into the default schema so partial
+        results are preserved. Never raises.
+        """
+        last_error: str = ""
+        raw: dict = {}
+
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                raw = await self._run(idea_spec)
+                validated = self.schema.model_validate(raw)
+                return validated.model_dump()
+            except ValidationError as e:
+                last_error = f"Validation error (attempt {attempt}): {e}"
+                logger.warning("G2 validation failed for %s (attempt %d): %s", self.name, attempt, e)
+            except Exception as e:
+                last_error = f"{type(e).__name__} (attempt {attempt}): {e}"
+                logger.warning("%s failed (attempt %d): %s", self.name, attempt, e)
+
+        # All retries exhausted — preserve whatever raw data the LLM returned
+        defaults = self.schema().model_dump()
+        if raw and isinstance(raw, dict):
+            # Merge raw LLM output into defaults so partial data is kept
+            for key in defaults:
+                if key in raw and raw[key]:
+                    val = raw[key]
+                    # Basic type check: only merge if compatible
+                    if isinstance(defaults[key], str) and isinstance(val, str):
+                        defaults[key] = val
+                    elif isinstance(defaults[key], list) and isinstance(val, list):
+                        defaults[key] = val
+                    elif isinstance(defaults[key], dict) and isinstance(val, dict):
+                        defaults[key] = val
+            logger.info("%s: merged %d raw fields into defaults after failure", self.name, sum(1 for k in defaults if k in raw and raw[k]))
+
+        if last_error:
+            defaults["_error"] = last_error
+            logger.error("%s exhausted %d retries. Last error: %s", self.name, MAX_RETRIES, last_error)
+
+        return defaults

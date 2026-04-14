@@ -16,6 +16,14 @@ interface AgentCard {
   detail: Record<string, unknown>
 }
 
+interface BuildAgentCard {
+  agentNumber: number
+  agentName: string
+  status: StageStatus
+  message: string
+  detail: Record<string, unknown> | null
+}
+
 const STAGE_NAMES = [
   'Input Layer',
   'C-Suite Analysis',
@@ -37,6 +45,19 @@ const AGENT_ROLES: { emoji: string; role: string; agentName: string }[] = [
 ]
 
 interface LogLine { time: string; level: string; msg: string }
+
+const BUILD_AGENT_NAMES: { number: number; name: string; label: string; emoji: string }[] = [
+  { number: 1, name: 'scaffold', label: 'Scaffold', emoji: '🏗️' },
+  { number: 2, name: 'router', label: 'Router', emoji: '🔀' },
+  { number: 3, name: 'component', label: 'Components', emoji: '🧩' },
+  { number: 4, name: 'page', label: 'Pages', emoji: '📄' },
+  { number: 5, name: 'api', label: 'API Layer', emoji: '🔌' },
+  { number: 6, name: 'database', label: 'Database', emoji: '🗃️' },
+  { number: 7, name: 'auth', label: 'Auth', emoji: '🔐' },
+  { number: 8, name: 'style', label: 'Styling', emoji: '🎨' },
+  { number: 9, name: 'test', label: 'Tests', emoji: '🧪' },
+  { number: 10, name: 'review', label: 'Review', emoji: '✅' },
+]
 
 const levelColor: Record<string, string> = { info: '#63d9ff', success: '#3dffa0', error: '#ff6b35', warn: '#f5c842' }
 
@@ -72,6 +93,9 @@ export default function PipelinePage() {
   )
   const [agents, setAgents] = useState<AgentCard[]>(
     AGENT_ROLES.map(a => ({ ...a, status: 'pending', output: '', detail: {} }))
+  )
+  const [buildAgents, setBuildAgents] = useState<BuildAgentCard[]>(
+    BUILD_AGENT_NAMES.map(b => ({ agentNumber: b.number, agentName: b.name, status: 'pending', message: '', detail: null }))
   )
   const [logs, setLogs] = useState<LogLine[]>([])
   const [elapsedStr, setElapsedStr] = useState('0:00')
@@ -123,12 +147,29 @@ export default function PipelinePage() {
       addLog((data.level as string) ?? 'info', (data.message as string) ?? '')
     }
 
+    if (type === 'build_agent_update') {
+      const agentNumber = data.agent_number as number
+      const agentName = data.agent_name as string
+      const status = data.status as StageStatus
+      const message = (data.message as string) ?? ''
+      const detail = (data.detail as Record<string, unknown>) ?? null
+      setBuildAgents(prev => prev.map(b =>
+        b.agentNumber === agentNumber
+          ? { ...b, status, message, ...(detail ? { detail } : {}) }
+          : b
+      ))
+      const matched = BUILD_AGENT_NAMES.find(b => b.number === agentNumber)
+      addLog(status === 'done' ? 'success' : status === 'failed' ? 'error' : 'info',
+        `Build ${matched?.label ?? agentName}: ${message || status}`)
+    }
+
     if (type === 'pipeline_complete') {
       const finalStatus = data.status as string
       if (finalStatus === 'completed') {
         // Mark remaining running/pending stages as done
         setStages(prev => prev.map(s => (s.status === 'running' || s.status === 'pending') ? { ...s, status: 'done' } : s))
-        setCompleted(true)
+        // Small delay so the Build green check is visible before overlay
+        setTimeout(() => setCompleted(true), 1200)
       } else {
         // Pipeline failed — only mark currently-running stage as failed, leave done stages alone
         setStages(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'failed' } : s))
@@ -221,6 +262,7 @@ export default function PipelinePage() {
     // Reset all state
     setStages(STAGE_NAMES.map(n => ({ name: n, status: 'pending', duration: '—', detail: {} })))
     setAgents(AGENT_ROLES.map(a => ({ ...a, status: 'pending', output: '', detail: {} })))
+    setBuildAgents(BUILD_AGENT_NAMES.map(b => ({ agentNumber: b.number, agentName: b.name, status: 'pending', message: '', detail: null })))
     setLogs([])
     setCompleted(false)
     setElapsedStr('0:00')
@@ -332,6 +374,8 @@ export default function PipelinePage() {
   const doneCount = stages.filter(s => s.status === 'done').length
   const currentStage = stages.findIndex(s => s.status === 'running') + 1
   const agentsDone = agents.filter(a => a.status === 'done').length
+  const buildAgentsDone = buildAgents.filter(b => b.status === 'done').length
+  const buildStageActive = stages[5]?.status === 'running' || buildAgents.some(b => b.status !== 'pending')
   const allDone = doneCount === stages.length
   const overallStatus = (completed || allDone) ? 'completed' : stages.some(s => s.status === 'failed') ? 'failed' : 'running'
 
@@ -602,6 +646,43 @@ export default function PipelinePage() {
           </div>
         </div>
       </div>
+
+      {/* Build Progress — shown when Build stage is active */}
+      {buildStageActive && (
+        <div className="card" style={{ padding: 18, marginBottom: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700 }}>Build Progress</h2>
+            <span className="tag tag-jade">{buildAgentsDone}/{buildAgents.length} Complete</span>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 14 }}>10 build agents generating your application sequentially</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+            {buildAgents.map(b => {
+              const meta = BUILD_AGENT_NAMES.find(m => m.number === b.agentNumber)
+              const fileCount = b.detail?.file_count as number | undefined
+              return (
+                <div key={b.agentNumber} style={{
+                  background: '#111125', borderRadius: 8, padding: '12px 13px',
+                  border: b.status === 'done' ? '1px solid rgba(61,255,160,0.2)' : b.status === 'running' ? '1px solid rgba(99,217,255,0.22)' : b.status === 'failed' ? '1px solid rgba(255,107,53,0.22)' : '1px solid rgba(255,255,255,0.06)',
+                  transition: 'border-color 200ms',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: b.message ? 6 : 0 }}>
+                    <span style={{ fontSize: 16 }}>{meta?.emoji ?? '⚙️'}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, flex: 1 }}>{meta?.label ?? b.agentName}</span>
+                    {b.status === 'done' && <span style={{ color: '#3dffa0', fontSize: 12 }}>✓</span>}
+                    {b.status === 'running' && <span style={{ color: '#63d9ff', fontSize: 10, animation: 'spin 1s linear infinite', display: 'inline-block' }}>◎</span>}
+                    {b.status === 'failed' && <span style={{ color: '#ff6b35', fontSize: 12 }}>✕</span>}
+                    {b.status === 'pending' && <span style={{ color: 'var(--muted)', fontSize: 10 }}>○</span>}
+                  </div>
+                  {b.message && <p style={{ fontSize: 9, color: 'var(--muted)', lineHeight: 1.4, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.message}</p>}
+                  {fileCount != null && fileCount > 0 && (
+                    <p style={{ fontSize: 9, color: '#3dffa0', margin: '3px 0 0', fontFamily: "'JetBrains Mono', monospace" }}>{fileCount} files</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Live event log */}
       <div className="card" style={{ padding: 18, maxHeight: 180, overflow: 'hidden', marginBottom: 18 }}>
