@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from app.agents.build.base import BaseBuildAgent
+from app.agents.build.base import BaseBuildAgent, build_design_context
 from app.agents.state import PipelineState
 
 
@@ -47,11 +47,14 @@ class StyleAgent(BaseBuildAgent):
             "- DO NOT include postcss.config.js — it's already generated"
         )
 
+        design_context = build_design_context(state)
         user_prompt = (
-            f"App: {app_name}\n"
-            f"Domain: {domain}\n"
-            f"Description: {idea_spec.get('description', '')}\n"
-            f"Existing components: {json.dumps(list(context_files.keys()))}"
+            f"{design_context}\n\n"
+            f"=== STYLE-SPECIFIC ===\n"
+            f"Existing components and pages to style:\n"
+            f"{json.dumps(list(context_files.keys()))}\n\n"
+            f"IMPORTANT: Use the exact design tokens above for colors, typography, and spacing.\n"
+            f"The tailwind.config.js must reflect the design system defined above."
         )
 
         return await self._call_llm(system_prompt, user_prompt)

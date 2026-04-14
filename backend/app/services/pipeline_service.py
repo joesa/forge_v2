@@ -88,6 +88,29 @@ async def get_pipeline_stages(pipeline_id: uuid.UUID, user_id: uuid.UUID) -> dic
     }
 
 
+async def get_latest_pipeline_for_project(project_id: uuid.UUID, user_id: uuid.UUID) -> dict | None:
+    """Get the most recent pipeline run for a project, or None if no runs exist."""
+    async with get_read_session() as session:
+        result = await session.execute(
+            select(PipelineRun).where(
+                PipelineRun.project_id == project_id,
+                PipelineRun.user_id == user_id,
+            ).order_by(PipelineRun.created_at.desc()).limit(1)
+        )
+        run = result.scalar_one_or_none()
+
+    if not run:
+        return None
+
+    return {
+        "pipeline_id": str(run.id),
+        "status": run.status.value,
+        "current_stage": run.current_stage,
+        "stage_states": run.stage_states,
+        "errors": run.errors,
+    }
+
+
 async def retry_pipeline(pipeline_id: uuid.UUID, user_id: uuid.UUID) -> str:
     """Retry a failed pipeline by creating a new run with the same idea_spec."""
     async with get_read_session() as session:

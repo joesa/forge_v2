@@ -56,8 +56,10 @@ export default function EditorPage() {
           <div style={{ width: 22, height: 22, background: 'linear-gradient(135deg, #63d9ff, #b06bff)', clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }} />
           <span style={{ fontWeight: 800, fontSize: 16, background: 'linear-gradient(135deg, #63d9ff, #b06bff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>FORGE</span>
           <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)', margin: '0 4px' }} />
-          <span style={{ fontSize: 12, color: 'rgba(232,232,240,0.55)', cursor: 'pointer' }}>{projectName || 'Loading…'} ▼</span>
+          <span style={{ fontSize: 12, color: 'rgba(232,232,240,0.55)', cursor: 'pointer' }} onClick={() => navigate(`/projects/${id}`)}>{projectName || 'Loading…'} ▼</span>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'rgba(232,232,240,0.30)', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: 10 }}>○ main</span>
+          <button className="btn btn-ghost btn-sm" style={{ height: 24, fontSize: 10, padding: '0 8px', color: '#63d9ff' }} onClick={() => navigate(`/pipeline/${id}`)}>◎ Pipeline</button>
+          <button className="btn btn-ghost btn-sm" style={{ height: 24, fontSize: 10, padding: '0 8px' }} onClick={() => navigate(`/projects/${id}`)}>← Project</button>
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>

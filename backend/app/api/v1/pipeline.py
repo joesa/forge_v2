@@ -40,6 +40,16 @@ async def run_pipeline(request: Request, body: PipelineRunRequest):
     return {"pipeline_id": pipeline_id, "status": "pending"}
 
 
+# ── GET /api/v1/pipeline/project/{id}/latest ─────────────────────
+
+@router.get("/project/{project_id}/latest")
+async def get_latest_pipeline(request: Request, project_id: UUID):
+    result = await pipeline_service.get_latest_pipeline_for_project(project_id, _user_id(request))
+    if result is None:
+        return {"pipeline_id": None, "status": None}
+    return result
+
+
 # ── GET /api/v1/pipeline/{id}/status ─────────────────────────────
 
 @router.get("/{pipeline_id}/status")

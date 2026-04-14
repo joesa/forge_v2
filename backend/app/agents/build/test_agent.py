@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from app.agents.build.base import BaseBuildAgent
+from app.agents.build.base import BaseBuildAgent, build_design_context
 from app.agents.state import PipelineState
 
 
@@ -41,9 +41,10 @@ class TestAgent(BaseBuildAgent):
             "- Test meaningful behavior, not just smoke tests"
         )
 
+        design_context = build_design_context(state)
         user_prompt = (
-            f"App: {idea_spec.get('name', 'App')}\n"
-            f"Description: {idea_spec.get('description', '')}\n"
+            f"{design_context}\n\n"
+            f"=== TEST-SPECIFIC ===\n"
             f"Source files to test:\n{json.dumps(testable_files, default=str)}\n"
             f"All files: {json.dumps(list(existing_files.keys()))}"
         )

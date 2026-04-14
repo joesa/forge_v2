@@ -111,14 +111,18 @@ export default function ProjectDetailPage() {
               <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: 'rgba(232,232,240,0.30)', marginTop: 10 }}>Updated {timeAgo(project.updated_at)}</p>
             )}
           </div>
-          <button className="btn btn-primary" onClick={() => navigate(`/projects/${id}/editor`)}>Open Editor →</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-primary" onClick={() => navigate(`/projects/${id}/editor`)}>Open Editor →</button>
+            <button className="btn btn-ghost" onClick={() => navigate(`/pipeline/${id}`)}>◎ Pipeline</button>
+          </div>
         </div>
       </div>
 
       {/* Quick links */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
         {[
           { icon: '⚡', label: 'Editor', path: `/projects/${id}/editor` },
+          { icon: '◎', label: 'Pipeline', path: `/pipeline/${id}` },
           { icon: '🔨', label: 'Builds', path: `/projects/${id}/builds` },
           { icon: '▲', label: 'Deployments', path: `/projects/${id}/deployments` },
           { icon: '⚙️', label: 'Settings', path: `/projects/${id}/settings` },

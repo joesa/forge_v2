@@ -161,10 +161,63 @@ export default function PipelinePage() {
     } catch { /* non-critical — WS events will fill in */ }
   }, [])
 
-  // Retry handler — reload the page to start a fresh pipeline for the same project
+  // Retry handler — reset state and start a fresh pipeline for the same project
   const [retrying, setRetrying] = useState(false)
+  const [needsManualRun, setNeedsManualRun] = useState(false)
+
+  const startPipeline = useCallback(async (proj: { name: string; description?: string; framework?: string }) => {
+    try {
+      const { data: pipe } = await apiClient.post('/pipeline/run', {
+        project_id: id,
+        idea_spec: {
+          description: proj.description ?? '',
+          framework: proj.framework ?? '',
+          name: proj.name ?? '',
+        },
+      })
+      const pipeId = pipe.pipeline_id as string
+      setPipelineId(pipeId)
+      pipelineIdRef.current = pipeId
+      addLog('success', `Pipeline started — ${pipeId.slice(0, 8)}`)
+
+      // Mark stage 1 as running
+      setStages(prev => prev.map((s, i) => i === 0 ? { ...s, status: 'running' } : s))
+
+      // Connect WebSocket for live events
+      const token = localStorage.getItem('access_token')
+      if (token) {
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+        const host = import.meta.env.VITE_API_BASE_URL
+          ? new URL(import.meta.env.VITE_API_BASE_URL as string).host
+          : window.location.host
+        const wsUrl = `${protocol}://${host}/api/v1/pipeline/${pipeId}/stream`
+        const ws = new WebSocket(wsUrl)
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          ws.send(token) // first message = JWT
+          setTimeout(() => { catchUp(pipeId) }, 500)
+        }
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data as string) as Record<string, unknown>
+            handleWsMessage(msg)
+          } catch { /* ignore non-JSON */ }
+        }
+
+        ws.onerror = () => addLog('warn', 'WebSocket error — retrying...')
+        ws.onclose = () => addLog('info', 'Pipeline stream closed')
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      addLog('error', msg ?? 'Failed to start pipeline')
+    }
+  }, [id, addLog, handleWsMessage, catchUp])
+
   const handleRetry = useCallback(() => {
     setRetrying(true)
+    setNeedsManualRun(false)
     // Reset all state
     setStages(STAGE_NAMES.map(n => ({ name: n, status: 'pending', duration: '—', detail: {} })))
     setAgents(AGENT_ROLES.map(a => ({ ...a, status: 'pending', output: '', detail: {} })))
@@ -172,13 +225,17 @@ export default function PipelinePage() {
     setCompleted(false)
     setElapsedStr('0:00')
     startRef.current = Date.now()
-    // Force re-mount by navigating to the same route with a cache-bust
-    navigate(`/pipeline/${id}`, { replace: true })
-    // The useEffect on [id] will fire and start a fresh pipeline
-    window.location.reload()
-  }, [id, navigate])
+    // Start fresh pipeline
+    apiClient.get(`/projects/${id}`).then(({ data: proj }) => {
+      setRetrying(false)
+      startPipeline(proj as { name: string; description?: string; framework?: string })
+    }).catch(() => {
+      setRetrying(false)
+      addLog('error', 'Failed to restart pipeline')
+    })
+  }, [id, addLog, startPipeline])
 
-  // 1. Fetch project → 2. Start pipeline → 3. Connect WebSocket → 4. Catch up
+  // 1. Fetch project → 2. Check for existing pipeline → 3. Start or show manual rerun
   useEffect(() => {
     if (!id) return
     let cancelled = false
@@ -190,51 +247,68 @@ export default function PipelinePage() {
         if (cancelled) return
         setProjectName(proj.name)
 
-        // Start the pipeline
-        const { data: pipe } = await apiClient.post('/pipeline/run', {
-          project_id: id,
-          idea_spec: {
-            description: proj.description ?? '',
-            framework: proj.framework ?? '',
-            name: proj.name ?? '',
-          },
-        })
-        if (cancelled) return
-        const pipeId = pipe.pipeline_id as string
-        setPipelineId(pipeId)
-        pipelineIdRef.current = pipeId
-        addLog('success', `Pipeline started — ${pipeId.slice(0, 8)}`)
-
-        // Mark stage 1 as running
-        setStages(prev => prev.map((s, i) => i === 0 ? { ...s, status: 'running' } : s))
-
-        // Connect WebSocket for live events
-        const token = localStorage.getItem('access_token')
-        if (token) {
-          const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-          const host = import.meta.env.VITE_API_BASE_URL
-            ? new URL(import.meta.env.VITE_API_BASE_URL as string).host
-            : window.location.host
-          const wsUrl = `${protocol}://${host}/api/v1/pipeline/${pipeId}/stream`
-          const ws = new WebSocket(wsUrl)
-          wsRef.current = ws
-
-          ws.onopen = () => {
-            ws.send(token) // first message = JWT
-            // After auth, catch up on any stage events that fired before WS connected
-            setTimeout(() => { if (!cancelled) catchUp(pipeId) }, 500)
-          }
-
-          ws.onmessage = (event) => {
-            try {
-              const msg = JSON.parse(event.data as string) as Record<string, unknown>
-              handleWsMessage(msg)
-            } catch { /* ignore non-JSON */ }
-          }
-
-          ws.onerror = () => addLog('warn', 'WebSocket error — retrying...')
-          ws.onclose = () => addLog('info', 'Pipeline stream closed')
+        // Check if there's already a completed/running pipeline for this project
+        const { data: latest } = await apiClient.get(`/pipeline/project/${id}/latest`) as {
+          data: { pipeline_id: string | null; status: string | null; stage_states: Record<string, string> | null }
         }
+
+        if (latest.pipeline_id && (latest.status === 'completed' || latest.status === 'success')) {
+          // Pipeline already completed — show results, don't auto-rerun
+          const pipeId = latest.pipeline_id
+          setPipelineId(pipeId)
+          pipelineIdRef.current = pipeId
+          const stageStates = latest.stage_states ?? {}
+          setStages(prev => prev.map((s, i) => {
+            const persisted = stageStates[String(i + 1)]
+            if (persisted === 'done') return { ...s, status: 'done', duration: '—' }
+            if (persisted === 'failed') return { ...s, status: 'failed' }
+            return s
+          }))
+          setCompleted(true)
+          setNeedsManualRun(true)
+          addLog('info', `Previous pipeline completed — ${pipeId.slice(0, 8)}`)
+          return
+        }
+
+        if (latest.pipeline_id && latest.status === 'running') {
+          // Pipeline still running — reconnect to it
+          const pipeId = latest.pipeline_id
+          setPipelineId(pipeId)
+          pipelineIdRef.current = pipeId
+          addLog('info', `Reconnecting to running pipeline — ${pipeId.slice(0, 8)}`)
+
+          setStages(prev => prev.map((s, i) => i === 0 ? { ...s, status: 'running' } : s))
+
+          const token = localStorage.getItem('access_token')
+          if (token) {
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+            const host = import.meta.env.VITE_API_BASE_URL
+              ? new URL(import.meta.env.VITE_API_BASE_URL as string).host
+              : window.location.host
+            const wsUrl = `${protocol}://${host}/api/v1/pipeline/${pipeId}/stream`
+            const ws = new WebSocket(wsUrl)
+            wsRef.current = ws
+
+            ws.onopen = () => {
+              ws.send(token)
+              setTimeout(() => { if (!cancelled) catchUp(pipeId) }, 500)
+            }
+
+            ws.onmessage = (event) => {
+              try {
+                const msg = JSON.parse(event.data as string) as Record<string, unknown>
+                handleWsMessage(msg)
+              } catch { /* ignore non-JSON */ }
+            }
+
+            ws.onerror = () => addLog('warn', 'WebSocket error — retrying...')
+            ws.onclose = () => addLog('info', 'Pipeline stream closed')
+          }
+          return
+        }
+
+        // No existing pipeline or it failed — start a new one
+        await startPipeline(proj as { name: string; description?: string; framework?: string })
       } catch (err: unknown) {
         const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
         addLog('error', msg ?? 'Failed to start pipeline')
@@ -252,7 +326,7 @@ export default function PipelinePage() {
       if (timerRef.current) clearInterval(timerRef.current)
       if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     }
-  }, [id, addLog, handleWsMessage, catchUp])
+  }, [id, addLog, handleWsMessage, catchUp, startPipeline])
 
   // Derive progress
   const doneCount = stages.filter(s => s.status === 'done').length
@@ -432,6 +506,7 @@ export default function PipelinePage() {
             Building: {projectName || '...'}
           </h1>
           <span className="tag tag-forge">Pipeline</span>
+          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => navigate(`/projects/${id}/editor`)}>⚡ Editor</button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <span className="tag tag-forge" style={overallStatus === 'running' ? { animation: 'pulse-f 1.8s ease-in-out infinite' } : undefined}>
@@ -446,6 +521,16 @@ export default function PipelinePage() {
               style={{ marginLeft: 4 }}
             >
               {retrying ? 'Retrying…' : '↻ Retry Pipeline'}
+            </button>
+          )}
+          {needsManualRun && overallStatus === 'completed' && (
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={retrying}
+              onClick={handleRetry}
+              style={{ marginLeft: 4 }}
+            >
+              {retrying ? 'Running…' : '↻ Rerun Pipeline'}
             </button>
           )}
         </div>
@@ -647,8 +732,8 @@ export default function PipelinePage() {
         </div>
       )}
 
-      {/* Completion overlay */}
-      {completed && !selectedStage && !selectedAgent && (
+      {/* Completion overlay — only show on fresh completions, not when revisiting */}
+      {completed && !needsManualRun && !selectedStage && !selectedAgent && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="card" style={{ padding: 36, maxWidth: 420, textAlign: 'center' }}>
             <div style={{ fontSize: 48, marginBottom: 14 }}>🎉</div>

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from app.agents.build.base import BaseBuildAgent
+from app.agents.build.base import BaseBuildAgent, build_design_context
 from app.agents.state import PipelineState
 
 
@@ -44,9 +44,10 @@ class DBAgent(BaseBuildAgent):
             "- Add a Database type mapping table names to row types for type-safe queries"
         )
 
+        design_context = build_design_context(state)
         user_prompt = (
-            f"App: {idea_spec.get('name', 'App')}\n"
-            f"Description: {idea_spec.get('description', '')}\n\n"
+            f"{design_context}\n\n"
+            f"=== DB-SPECIFIC ===\n"
             f"Entities:\n{json.dumps(entities, indent=2, default=str)}\n\n"
             f"Model definitions: {json.dumps(model_defs, default=str) if model_defs else '(none)'}\n"
             f"Pydantic code:\n{pydantic_code or '(none)'}\n\n"

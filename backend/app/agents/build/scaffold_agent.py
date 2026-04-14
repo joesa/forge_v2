@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from app.agents.build.base import BaseBuildAgent
+from app.agents.build.base import BaseBuildAgent, build_design_context
 from app.agents.state import PipelineState
 from app.reliability.layer1_pregeneration.dependency_resolver import resolve_dependencies
 from app.reliability.layer1_pregeneration.lockfile_generator import generate_package_json
@@ -91,12 +91,11 @@ class ScaffoldAgent(BaseBuildAgent):
             "All code must be production-quality TypeScript with strict mode."
         )
 
+        design_context = build_design_context(state)
         user_prompt = (
-            f"App name: {app_name}\n"
-            f"Framework: {framework}\n"
-            f"Description: {idea_spec.get('description', 'A web application')}\n"
-            f"Domain: {plan.get('domain', 'saas')}\n"
-            f"Dependencies: {json.dumps(list(resolved_deps.keys()), default=str)}"
+            f"{design_context}\n\n"
+            f"=== SCAFFOLD-SPECIFIC ===\n"
+            f"Dependencies to include: {json.dumps(list(resolved_deps.keys()), default=str)}"
         )
 
         files = await self._call_llm(system_prompt, user_prompt)

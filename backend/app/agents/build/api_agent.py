@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from app.agents.build.base import BaseBuildAgent
+from app.agents.build.base import BaseBuildAgent, build_design_context
 from app.agents.state import PipelineState
 
 
@@ -52,9 +52,10 @@ class APIAgent(BaseBuildAgent):
             "- Support ordering and pagination parameters"
         )
 
+        design_context = build_design_context(state)
         user_prompt = (
-            f"App: {idea_spec.get('name', 'App')}\n"
-            f"Description: {idea_spec.get('description', '')}\n\n"
+            f"{design_context}\n\n"
+            f"=== API-SPECIFIC ===\n"
             f"Entities (Supabase tables):\n{json.dumps(entities, indent=2, default=str)}\n\n"
             f"Features:\n{json.dumps(features, indent=2, default=str)}\n\n"
             f"OpenAPI spec (for reference):\n"
