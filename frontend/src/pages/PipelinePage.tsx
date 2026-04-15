@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import apiClient from '@/api/client'
 
 type StageStatus = 'done' | 'running' | 'pending' | 'failed'
@@ -84,6 +84,8 @@ function elapsed(startMs: number): string {
 export default function PipelinePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
+  const passedIdeaSpec = (location.state as { ideaSpec?: Record<string, unknown> } | null)?.ideaSpec ?? null
 
   const [projectName, setProjectName] = useState('')
   const [, setPipelineId] = useState<string | null>(null)
@@ -215,13 +217,16 @@ export default function PipelinePage() {
 
   const startPipeline = useCallback(async (proj: { name: string; description?: string; framework?: string }) => {
     try {
+      const baseSpec = {
+        description: proj.description ?? '',
+        framework: proj.framework ?? '',
+        name: proj.name ?? '',
+      }
+      // Merge enriched idea_spec from generated idea if passed via location state
+      const ideaSpec = passedIdeaSpec ? { ...baseSpec, ...passedIdeaSpec } : baseSpec
       const { data: pipe } = await apiClient.post('/pipeline/run', {
         project_id: id,
-        idea_spec: {
-          description: proj.description ?? '',
-          framework: proj.framework ?? '',
-          name: proj.name ?? '',
-        },
+        idea_spec: ideaSpec,
       })
       const pipeId = pipe.pipeline_id as string
       setPipelineId(pipeId)
@@ -261,7 +266,7 @@ export default function PipelinePage() {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       addLog('error', msg ?? 'Failed to start pipeline')
     }
-  }, [id, addLog, handleWsMessage, catchUp])
+  }, [id, addLog, handleWsMessage, catchUp, passedIdeaSpec])
 
   const handleRetry = useCallback(() => {
     setRetrying(true)

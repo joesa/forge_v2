@@ -20,11 +20,13 @@ export default function PreviewToolbar({
   const {
     previewRoute,
     previewDevice,
+    previewExpanded,
     annotationMode,
     devConsoleErrors,
     setPreviewRoute,
     setPreviewDevice,
     toggleAnnotationMode,
+    togglePreviewExpanded,
   } = useEditorStore()
 
   const [sharePopover, setSharePopover] = useState(false)
@@ -275,6 +277,15 @@ export default function PreviewToolbar({
           ● {devConsoleErrors}
         </div>
       )}
+
+      {/* Expand / Collapse */}
+      <button
+        style={previewExpanded ? btnActive : btnBase}
+        onClick={togglePreviewExpanded}
+        title={previewExpanded ? 'Collapse preview' : 'Expand preview'}
+      >
+        {previewExpanded ? '⊟' : '⊞'}
+      </button>
     </div>
   )
 }

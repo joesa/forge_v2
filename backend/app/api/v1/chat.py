@@ -200,8 +200,27 @@ async def chat_message(request: Request, body: ChatRequest):
             body.project_id, body.active_file, body.active_file_content
         )
 
-    # Convert messages
-    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+    # Convert messages and truncate history to stay within token limits.
+    # Anthropic claude-sonnet-4 has 200k context; we aim for ~120k input tokens (~480k chars)
+    # to leave room for max_tokens output. Old assistant messages with large forge-edit blocks
+    # are the primary cause of overflow.
+    MAX_INPUT_CHARS = 400_000  # ~100k tokens, leaves room for max_tokens
+    raw_messages = [{"role": m.role, "content": m.content} for m in body.messages]
+
+    # Always keep the last user message. Trim from the beginning if over budget.
+    total_chars = sum(len(m["content"]) for m in raw_messages) + len(system_prompt)
+    messages = list(raw_messages)
+    while total_chars > MAX_INPUT_CHARS and len(messages) > 1:
+        removed = messages.pop(0)
+        total_chars -= len(removed["content"])
+        # Ensure messages still start with a user message (Anthropic requirement)
+        while messages and messages[0]["role"] == "assistant":
+            removed = messages.pop(0)
+            total_chars -= len(removed["content"])
+
+    if len(messages) < len(raw_messages):
+        trimmed = len(raw_messages) - len(messages)
+        logger.info("Chat context trimmed: dropped %d old messages to fit %d chars", trimmed, total_chars)
 
     async def _stream_anthropic():
         """Try Anthropic models with auto-continuation on max_tokens."""
@@ -225,6 +244,11 @@ async def chat_message(request: Request, body: ChatRequest):
         conv_messages = list(messages)  # mutable copy for continuations
         accumulated = ""
 
+        # Dynamically compute max_tokens to stay within 200k context limit
+        # Rough estimate: 1 token ≈ 4 chars
+        est_input_tokens = (len(system_prompt) + sum(len(m["content"]) for m in conv_messages)) // 4
+        effective_max_tokens = min(ANTHROPIC_MAX_TOKENS, max(4096, 195_000 - est_input_tokens))
+
         for continuation in range(max_continuations + 1):
             if continuation > 0:
                 logger.info("Anthropic continuation %d/%d for model=%s", continuation, max_continuations, model)
@@ -235,14 +259,14 @@ async def chat_message(request: Request, body: ChatRequest):
                     try:
                         async with client.messages.stream(
                             model=m,
-                            max_tokens=ANTHROPIC_MAX_TOKENS,
+                            max_tokens=effective_max_tokens,
                             system=system_prompt,
                             messages=conv_messages,
                         ) as stream:
                             async for text in stream.text_stream:
                                 accumulated += text
                                 yield ("text", text)
-                            final_msg = stream.get_final_message()
+                            final_msg = await stream.get_final_message()
 
                         # Check if model hit output token limit
                         stop_reason = final_msg.stop_reason if final_msg else "end_turn"
@@ -273,6 +297,10 @@ async def chat_message(request: Request, body: ChatRequest):
                             logger.warning("Anthropic %s overloaded (attempt %d/3)", m, attempt + 1)
                             await asyncio.sleep(2 ** attempt)
                             continue
+                        if e.status_code == 400 and "context limit" in str(e):
+                            logger.warning("Anthropic %s context too large, falling back: %s", m, e)
+                            yield ("fallback", None)
+                            return
                         logger.error("Anthropic APIStatusError (model=%s, status=%s): %s", m, e.status_code, e)
                         break
                     except anthropic.APIError as e:
@@ -309,7 +337,26 @@ async def chat_message(request: Request, body: ChatRequest):
 
         logger.info("OpenAI fallback: model=%s", OPENAI_MODEL)
         client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        oai_messages = [{"role": "system", "content": system_prompt}] + messages
+
+        # GPT-4o has 128k context but user may have low TPM limit.
+        # Truncate to ~100k chars (~25k tokens) for the OpenAI fallback.
+        OAI_MAX_CHARS = 100_000
+        oai_msgs = list(messages)
+        oai_sys = system_prompt
+        total = len(oai_sys) + sum(len(m["content"]) for m in oai_msgs)
+        # First: trim system prompt if huge (keep first 40k chars)
+        if total > OAI_MAX_CHARS and len(oai_sys) > 40_000:
+            oai_sys = oai_sys[:40_000] + "\n... (context truncated for token limits)"
+            total = len(oai_sys) + sum(len(m["content"]) for m in oai_msgs)
+        # Then trim old messages
+        while total > OAI_MAX_CHARS and len(oai_msgs) > 1:
+            removed = oai_msgs.pop(0)
+            total -= len(removed["content"])
+            while oai_msgs and oai_msgs[0]["role"] == "assistant":
+                removed = oai_msgs.pop(0)
+                total -= len(removed["content"])
+
+        oai_messages = [{"role": "system", "content": oai_sys}] + oai_msgs
 
         try:
             stream = await client.chat.completions.create(

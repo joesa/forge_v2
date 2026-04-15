@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import apiClient from '@/api/client'
 
 interface Idea {
+  id: string
   title: string
   tagline: string
   uniqueness: number
@@ -11,21 +13,124 @@ interface Idea {
   market: string
   revenue: string
   stack: string[]
+  description: string
+  saved: boolean
 }
 
-const mockIdeas: Idea[] = [
-  { title: 'DevFlow', tagline: 'GitHub-native project management for small teams', uniqueness: 8.2, complexity: 6, problem: 'Small dev teams juggle multiple tools for project tracking, losing context between code and tasks.', solution: 'A GitHub-integrated project board with AI-powered sprint planning and automatic issue linking.', market: '$4.2B', revenue: '$120k ARR Y1', stack: ['Next.js', 'Supabase', 'GitHub API', 'OpenAI'] },
-  { title: 'PriceRadar', tagline: 'AI-powered competitive pricing intelligence', uniqueness: 7.5, complexity: 7, problem: 'E-commerce brands manually track competitor prices across dozens of sites.', solution: 'Automated price monitoring with AI recommendations for optimal pricing strategies.', market: '$2.8B', revenue: '$85k ARR Y1', stack: ['React', 'Python', 'Puppeteer', 'GPT-4'] },
-  { title: 'MeetSync', tagline: 'Async meeting summaries that actually work', uniqueness: 6.8, complexity: 5, problem: 'Remote teams waste hours in meetings that could be emails.', solution: 'AI meeting recorder that creates structured summaries, action items, and follow-ups.', market: '$6.1B', revenue: '$200k ARR Y1', stack: ['Next.js', 'Whisper', 'Claude', 'Stripe'] },
-  { title: 'StackBuddy', tagline: 'AI code review for junior developers', uniqueness: 7.1, complexity: 8, problem: 'Junior devs wait hours for code reviews, slowing their learning cycle.', solution: 'Instant AI code reviews with explanations, best practices, and mentor-style feedback.', market: '$1.9B', revenue: '$60k ARR Y1', stack: ['VS Code Extension', 'Claude', 'TypeScript'] },
-  { title: 'FormForge', tagline: 'AI-generated forms from natural language', uniqueness: 8.8, complexity: 4, problem: 'Building forms is tedious. Most form builders require manual field-by-field setup.', solution: 'Describe your form in plain English, get a production-ready form with validation and submission logic.', market: '$3.5B', revenue: '$95k ARR Y1', stack: ['React', 'Zod', 'Supabase', 'OpenAI'] },
-]
+interface SessionResponse {
+  session_id: string
+  status: string
+  ideas: Idea[]
+}
 
 export default function IdeaDetailPage() {
   const navigate = useNavigate()
-  const [saved, setSaved] = useState<Set<number>>(new Set())
+  const [searchParams] = useSearchParams()
+  const sessionId = searchParams.get('session')
+  const [ideas, setIdeas] = useState<Idea[]>([])
+  const [status, setStatus] = useState<string>(sessionId ? 'generating' : 'none')
+  const [error, setError] = useState<string | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const toggleSave = (i: number) => setSaved(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n })
+  const fetchSession = useCallback(async (sid: string) => {
+    try {
+      const { data } = await apiClient.get<SessionResponse>(`/ideas/session/${sid}`)
+      setStatus(data.status)
+      if (data.ideas.length > 0) {
+        setIdeas(data.ideas)
+      }
+      if (data.status === 'completed' || data.status === 'failed') {
+        if (pollRef.current) {
+          clearInterval(pollRef.current)
+          pollRef.current = null
+        }
+        if (data.status === 'failed') {
+          setError('Idea generation failed. Please try again.')
+        }
+      }
+    } catch {
+      setError('Failed to load ideas.')
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [])
+
+  // If no session param, try to load the latest session
+  useEffect(() => {
+    if (sessionId) return
+    apiClient.get<SessionResponse>('/ideas/latest').then(({ data }) => {
+      if (data.session_id && data.ideas.length > 0) {
+        setIdeas(data.ideas)
+        setStatus(data.status)
+      } else if (data.session_id && data.status === 'generating') {
+        setStatus('generating')
+        pollRef.current = setInterval(() => void fetchSession(data.session_id), 2000)
+      } else {
+        setStatus('none')
+      }
+    }).catch(() => setStatus('none'))
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [sessionId, fetchSession])
+
+  // Poll for session completion when we have a session ID  
+  useEffect(() => {
+    if (!sessionId) return
+    void fetchSession(sessionId)
+    pollRef.current = setInterval(() => void fetchSession(sessionId), 2000)
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+  }, [sessionId, fetchSession])
+
+  const toggleSave = async (idea: Idea, index: number) => {
+    try {
+      const { data } = await apiClient.patch<{ saved: boolean }>(`/ideas/${idea.id}/save`)
+      setIdeas(prev => prev.map((item, i) => i === index ? { ...item, saved: data.saved } : item))
+    } catch { /* ignore */ }
+  }
+
+  const handleRegenerate = async () => {
+    setStatus('generating')
+    setIdeas([])
+    setError(null)
+    try {
+      const { data } = await apiClient.post<{ session_id: string }>('/ideas/generate', { answers: {} })
+      pollRef.current = setInterval(() => void fetchSession(data.session_id), 2000)
+    } catch {
+      setError('Failed to regenerate. Please try again.')
+      setStatus('none')
+    }
+  }
+
+  // Loading / generating state
+  if (status === 'generating' && ideas.length === 0) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <div style={{
+          width: 40, height: 40,
+          border: '3px solid rgba(99,217,255,0.2)',
+          borderTopColor: '#63d9ff',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+        }} />
+        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Generating your ideas…</div>
+        <div style={{ fontSize: 12, color: 'rgba(232,232,240,0.45)' }}>AI is analyzing your answers and crafting unique app ideas</div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+      </div>
+    )
+  }
+
+  // No ideas state
+  if (status === 'none' && ideas.length === 0) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <div style={{ fontSize: 44 }}>💡</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>No ideas yet</div>
+        <div style={{ fontSize: 12, color: 'rgba(232,232,240,0.45)' }}>Take the questionnaire to generate personalized app ideas</div>
+        <button className="btn btn-primary" onClick={() => navigate('/ideate/questionnaire/new')}>Start Questionnaire →</button>
+      </div>
+    )
+  }
 
   return (
     <div style={{ padding: '36px 40px' }}>
@@ -37,24 +142,32 @@ export default function IdeaDetailPage() {
             <h1 style={{ fontSize: 26, fontWeight: 800 }}>Your Ideas</h1>
             <span className="tag tag-forge">AI Generated</span>
           </div>
-          <p style={{ fontSize: 12, color: 'var(--muted)' }}>5 AI-generated ideas · Private for 7 days · Based on your answers</p>
+          <p style={{ fontSize: 12, color: 'var(--muted)' }}>{ideas.length} AI-generated ideas · Private for 7 days · Based on your answers</p>
         </div>
-        <button className="btn btn-ghost btn-sm">↻ Regenerate All</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => void handleRegenerate()}>↻ Regenerate All</button>
       </div>
+
+      {error && (
+        <div style={{ background: 'rgba(255,107,53,0.08)', border: '1px solid rgba(255,107,53,0.22)', borderRadius: 8, padding: '10px 16px', marginBottom: 16, fontSize: 12, color: '#ff6b35' }}>
+          {error}
+        </div>
+      )}
 
       {/* Top 3 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
-        {mockIdeas.slice(0, 3).map((idea, i) => (
-          <IdeaCard key={i} idea={idea} index={i} saved={saved.has(i)} onSave={() => toggleSave(i)} onBuild={() => navigate('/projects/new')} />
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(ideas.length, 3)}, 1fr)`, gap: 12, marginBottom: 12 }}>
+        {ideas.slice(0, 3).map((idea, i) => (
+          <IdeaCard key={idea.id} idea={idea} index={i} onSave={() => void toggleSave(idea, i)} onBuild={() => navigate('/projects/new', { state: { idea } })} />
         ))}
       </div>
 
-      {/* Bottom 2 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-        {mockIdeas.slice(3).map((idea, i) => (
-          <IdeaCard key={i + 3} idea={idea} index={i + 3} saved={saved.has(i + 3)} onSave={() => toggleSave(i + 3)} onBuild={() => navigate('/projects/new')} />
-        ))}
-      </div>
+      {/* Remaining */}
+      {ideas.length > 3 && (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(ideas.length - 3, 2)}, 1fr)`, gap: 12 }}>
+          {ideas.slice(3).map((idea, i) => (
+            <IdeaCard key={idea.id} idea={idea} index={i + 3} onSave={() => void toggleSave(idea, i + 3)} onBuild={() => navigate('/projects/new', { state: { idea } })} />
+          ))}
+        </div>
+      )}
 
       {/* Footer */}
       <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: 'rgba(232,232,240,0.20)', textAlign: 'center', marginTop: 22 }}>Ideas private for 7 days · Similar ideas may surface to other users after expiry</p>
@@ -62,7 +175,7 @@ export default function IdeaDetailPage() {
   )
 }
 
-function IdeaCard({ idea, index, saved, onSave, onBuild }: { idea: Idea; index: number; saved: boolean; onSave: () => void; onBuild: () => void }) {
+function IdeaCard({ idea, index, onSave, onBuild }: { idea: Idea; index: number; onSave: () => void; onBuild: () => void }) {
   return (
     <div style={{ borderRadius: 13, border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden', animation: `fade-in 280ms ease ${index * 150}ms both` }}>
       {/* Header */}
@@ -94,7 +207,7 @@ function IdeaCard({ idea, index, saved, onSave, onBuild }: { idea: Idea; index: 
 
       {/* Actions */}
       <div style={{ padding: '10px 16px', display: 'flex', gap: 7 }}>
-        <button className="btn btn-ghost btn-sm" onClick={onSave} style={{ color: saved ? '#3dffa0' : undefined }}>{saved ? '💾 Saved' : '💾 Save'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={onSave} style={{ color: idea.saved ? '#3dffa0' : undefined }}>{idea.saved ? '💾 Saved' : '💾 Save'}</button>
         <button className="btn btn-ghost btn-sm">↻</button>
         <button className="btn btn-primary btn-sm" style={{ flex: 1 }} onClick={onBuild}>🚀 Build This</button>
       </div>

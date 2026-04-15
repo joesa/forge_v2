@@ -9,7 +9,7 @@ import PreviewDevConsole from './PreviewDevConsole'
 const MONO = "'JetBrains Mono', monospace"
 
 export default function PreviewPane() {
-  const { sandboxId, previewDevice, previewRoute, selectedSnapshot } = useEditorStore()
+  const { sandboxId, previewDevice, previewRoute, selectedSnapshot, previewExpanded } = useEditorStore()
   const syncLive = useEditorStore((s) => s.syncSteps.live)
   const chatStreaming = useEditorStore((s) => s.chatStreaming)
   const { previewUrl, loading, healthy, booting, error, snapshotImageUrl, refresh } =
@@ -100,8 +100,10 @@ export default function PreviewPane() {
   return (
     <div
       style={{
-        width: 310,
-        flexShrink: 0,
+        width: previewExpanded ? undefined : 310,
+        flex: previewExpanded ? 1 : undefined,
+        minWidth: previewExpanded ? 0 : undefined,
+        flexShrink: previewExpanded ? undefined : 0,
         display: 'flex',
         flexDirection: 'column',
         borderLeft: '1px solid rgba(255,255,255,0.06)',

@@ -42,6 +42,7 @@ from app.api.v1.pipeline import router as pipeline_router
 from app.api.v1.sandbox import router as sandbox_router
 from app.api.v1.editor import router as editor_router
 from app.api.v1.chat import router as chat_router
+from app.api.v1.ideas import router as ideas_router
 
 app.include_router(auth_router)
 app.include_router(projects_router)
@@ -49,6 +50,7 @@ app.include_router(pipeline_router)
 app.include_router(sandbox_router)
 app.include_router(editor_router)
 app.include_router(chat_router)
+app.include_router(ideas_router)
 
 
 # ── Inngest endpoint ─────────────────────────────────────────────

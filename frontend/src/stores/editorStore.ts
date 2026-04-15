@@ -61,6 +61,7 @@ interface EditorState {
   modifiedFiles: Set<string>
 
   previewVisible: boolean
+  previewExpanded: boolean
   previewDevice: 'mobile' | 'desktop'
   previewRoute: string
 
@@ -86,6 +87,7 @@ interface EditorState {
   markAllSaved: () => void
 
   togglePreview: () => void
+  togglePreviewExpanded: () => void
   setPreviewDevice: (device: 'mobile' | 'desktop') => void
   setPreviewRoute: (route: string) => void
 
@@ -117,6 +119,7 @@ const initialState = {
   fileContents: {} as Record<string, string>,
   modifiedFiles: new Set<string>(),
   previewVisible: false,
+  previewExpanded: false,
   previewDevice: 'desktop' as const,
   previewRoute: '/',
   annotationMode: false,
@@ -184,7 +187,8 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   markAllSaved: () => set({ modifiedFiles: new Set() }),
 
-  togglePreview: () => set((s) => ({ previewVisible: !s.previewVisible })),
+  togglePreview: () => set((s) => ({ previewVisible: !s.previewVisible, previewExpanded: !s.previewVisible ? s.previewExpanded : false })),
+  togglePreviewExpanded: () => set((s) => ({ previewExpanded: !s.previewExpanded, previewVisible: true })),
   setPreviewDevice: (device) => set({ previewDevice: device }),
   setPreviewRoute: (route) => set({ previewRoute: route }),
 

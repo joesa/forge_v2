@@ -232,10 +232,18 @@ async def input_layer(state: PipelineState) -> PipelineState:
         await _publish(state, 1, "running", "Running Design Architect…")
 
         from app.agents.design_architect import run_design_architect
+
+        # Build idea_context from enriched fields (from generated ideas)
+        idea_context = {}
+        for field in ("problem", "solution", "market", "revenue", "tagline", "target_stack", "uniqueness", "complexity"):
+            if idea_spec.get(field):
+                idea_context[field] = idea_spec[field]
+
         design_output = await run_design_architect(
             idea=idea_spec.get("description", ""),
             name=idea_spec.get("name", ""),
             framework=framework,
+            idea_context=idea_context if idea_context else None,
         )
 
         # Store the full design architecture output

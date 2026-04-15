@@ -1,6 +1,20 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import apiClient from '@/api/client'
+
+interface PassedIdea {
+  id: string
+  title: string
+  tagline: string
+  uniqueness: number
+  complexity: number
+  problem: string
+  solution: string
+  market: string
+  revenue: string
+  stack: string[]
+  description: string
+}
 
 const cloudServices = ['Supabase', 'Stripe', 'OpenAI', 'Resend', 'Twilio', 'AWS S3', 'Cloudflare', 'Auth0', 'Pinecone', 'SendGrid']
 
@@ -14,7 +28,9 @@ const frameworks = Object.keys(frameworkMap)
 
 export default function NewProjectPage() {
   const navigate = useNavigate()
-  const [path, setPath] = useState<'prompt' | 'ideate' | null>(null)
+  const location = useLocation()
+  const passedIdea = (location.state as { idea?: PassedIdea } | null)?.idea ?? null
+  const [path, setPath] = useState<'prompt' | 'ideate' | null>(passedIdea ? 'prompt' : null)
   const [prompt, setPrompt] = useState('')
   const [aiEnhance, setAiEnhance] = useState(true)
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set())
@@ -22,17 +38,62 @@ export default function NewProjectPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
+  // Pre-fill form when navigating from "Build This" on a generated idea
+  useEffect(() => {
+    if (!passedIdea) return
+    const parts = [
+      passedIdea.description,
+      passedIdea.problem ? `Problem: ${passedIdea.problem}` : '',
+      passedIdea.solution ? `Solution: ${passedIdea.solution}` : '',
+      passedIdea.market ? `Target Market: ${passedIdea.market}` : '',
+      passedIdea.revenue ? `Revenue Model: ${passedIdea.revenue}` : '',
+    ].filter(Boolean)
+    setPrompt(parts.join('\n\n').slice(0, 2000))
+    // Auto-select framework based on idea's recommended stack
+    if (passedIdea.stack?.length) {
+      const stackStr = passedIdea.stack.join(' ').toLowerCase()
+      if (stackStr.includes('next')) setSelectedFramework('Next.js')
+      else if (stackStr.includes('vue')) setSelectedFramework('Vue')
+      else if (stackStr.includes('svelte')) setSelectedFramework('Svelte')
+      else if (stackStr.includes('vite') || stackStr.includes('react')) setSelectedFramework('React + Vite')
+    }
+  }, [passedIdea])
+
   const handleStartBuild = async () => {
     if (!prompt.trim()) return
     setSubmitting(true)
     setSubmitError('')
     try {
+      const projectName = passedIdea?.title ?? prompt.slice(0, 80)
+      const framework = frameworkMap[selectedFramework] ?? 'nextjs'
+      const description = prompt
+
+      // Build enriched idea_spec when coming from a generated idea
+      const ideaSpec: Record<string, unknown> = {
+        name: projectName,
+        framework,
+        description,
+      }
+      if (passedIdea) {
+        ideaSpec.problem = passedIdea.problem
+        ideaSpec.solution = passedIdea.solution
+        ideaSpec.market = passedIdea.market
+        ideaSpec.revenue = passedIdea.revenue
+        ideaSpec.tagline = passedIdea.tagline
+        ideaSpec.uniqueness = passedIdea.uniqueness
+        ideaSpec.complexity = passedIdea.complexity
+        ideaSpec.target_stack = passedIdea.stack
+        ideaSpec.source_idea_id = passedIdea.id
+      }
+
       const { data } = await apiClient.post('/projects', {
-        name: prompt.slice(0, 80),
-        framework: frameworkMap[selectedFramework] ?? 'nextjs',
-        description: prompt,
+        name: projectName,
+        framework,
+        description,
       })
-      navigate(`/pipeline/${data.id}`)
+      navigate(`/pipeline/${data.id}`, {
+        state: passedIdea ? { ideaSpec: ideaSpec } : undefined,
+      })
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       setSubmitError(msg ?? 'Failed to create project')

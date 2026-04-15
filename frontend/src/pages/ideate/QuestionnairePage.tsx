@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import apiClient from '@/api/client'
 
 type AnswerType = 'chips' | 'grid' | 'slider' | 'text'
 
@@ -41,10 +42,37 @@ export default function QuestionnairePage() {
     setAnswers(a => ({ ...a, [current]: [opt] }))
   }, [current])
 
+  const [submitting, setSubmitting] = useState(false)
+
+  const submitAnswers = useCallback(async (finalAnswers: Record<number, string[] | string>) => {
+    setSubmitting(true)
+    try {
+      // Map numeric indices to question labels
+      const labeled: Record<string, string[] | string> = {}
+      questions.forEach((q, i) => {
+        if (finalAnswers[i] !== undefined) {
+          labeled[q.text] = finalAnswers[i]
+        }
+      })
+      const { data } = await apiClient.post<{ session_id: string }>('/ideas/generate', { answers: labeled })
+      navigate(`/ideate/ideas/generated?session=${data.session_id}`)
+    } catch {
+      // Fallback: navigate without session (will show error state)
+      navigate('/ideate/ideas/generated')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [navigate])
+
   const next = () => {
-    if (q.type === 'slider') setAnswers(a => ({ ...a, [current]: [String(sliderVal)] }))
-    if (current < questions.length - 1) setCurrent(c => c + 1)
-    else navigate('/ideate/ideas/generated')
+    const updated = { ...answers }
+    if (q.type === 'slider') updated[current] = [String(sliderVal)]
+    setAnswers(updated)
+    if (current < questions.length - 1) {
+      setCurrent(c => c + 1)
+    } else {
+      void submitAnswers(updated)
+    }
   }
 
   return (
@@ -58,7 +86,7 @@ export default function QuestionnairePage() {
         <div style={{ flex: 1, textAlign: 'center' }}>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'rgba(232,232,240,0.35)' }}>Question {current + 1} of {questions.length}</span>
         </div>
-        <button className="btn btn-ghost btn-sm" style={{ color: 'var(--ember)', borderColor: 'rgba(255,107,53,0.22)' }} onClick={() => navigate('/ideate/ideas/generated')}>Skip All →</button>
+        <button className="btn btn-ghost btn-sm" style={{ color: 'var(--ember)', borderColor: 'rgba(255,107,53,0.22)' }} onClick={() => void submitAnswers(answers)}>Skip All →</button>
       </nav>
 
       {/* Content */}
@@ -143,8 +171,8 @@ export default function QuestionnairePage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <button className="btn btn-ghost" onClick={() => setCurrent(c => Math.max(0, c - 1))} style={{ opacity: current === 0 ? 0.3 : 1 }}>← Back</button>
             <button className="btn btn-ghost btn-sm" style={{ color: 'rgba(232,232,240,0.40)' }} onClick={next}>Skip this →</button>
-            <button className="btn btn-primary" onClick={next}>
-              {current === questions.length - 1 ? 'Generate Ideas →' : 'Next →'}
+            <button className="btn btn-primary" onClick={next} disabled={submitting}>
+              {submitting ? 'Generating…' : current === questions.length - 1 ? 'Generate Ideas →' : 'Next →'}
             </button>
           </div>
         </div>

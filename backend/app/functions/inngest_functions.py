@@ -88,7 +88,17 @@ async def store_ideas(
                 title=idea_data.get("title", ""),
                 description=idea_data.get("description", ""),
                 tech_stack=idea_data.get("tech_stack", {}),
-                market_analysis=idea_data.get("market_analysis"),
+                market_analysis={
+                    "tagline": idea_data.get("tagline", ""),
+                    "uniqueness": idea_data.get("uniqueness", 7.0),
+                    "complexity": idea_data.get("complexity", 5.0),
+                    "problem": idea_data.get("problem", ""),
+                    "solution": idea_data.get("solution", ""),
+                    "market": idea_data.get("market", "N/A"),
+                    "revenue": idea_data.get("revenue", "N/A"),
+                    "stack": idea_data.get("stack", []),
+                    **(idea_data.get("market_analysis") if isinstance(idea_data.get("market_analysis"), dict) else {}),
+                },
                 status="generated",
             )
             db.add(idea)
